@@ -1,0 +1,23 @@
+name: flutter_api_bridge_example
+description: Example application demonstrating the flutter_api_bridge package.
+version: 1.0.0+1
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Local path dependency - points to the parent package
+  flutter_api_bridge:
+    path: ..
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

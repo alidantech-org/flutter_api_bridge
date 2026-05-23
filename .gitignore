@@ -1,0 +1,90 @@
+# Dart / Flutter / Pub related
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+*.iml
+*.lock
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Android
+android/local.properties
+android/GeneratedPluginRegistrant.java
+android/.gradle/
+android/gradle.properties
+android/.idea/
+android/.classpath
+android/.project
+android/.settings/
+android/local.properties
+
+# iOS
+ios/.symlinks/
+ios/.generated/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeralfluttermod/
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+
+# macOS
+macos/Flutter/Flutter.framework
+macos/Flutter/Flutter.podspec
+macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Windows
+windows/flutter/generated_plugins.cmake
+windows/flutter/generated_pluginregistrant.cc
+windows/flutter/generated_plugins.cmake
+windows/flutter/flutter.vcxproj
+windows/flutter/flutter.vcxproj.user
+
+# Linux
+linux/flutter/generated_plugins.cmake
+
+# Web
+lib/generated_plugin_registrant.dart
+
+# Exceptions to above rules
+!/packages/**/example/android/gradlew
+!/packages/**/example/android/gradle-wrapper.jar
+!/example/android/gradlew
+!/example/android/gradle-wrapper.jar
+
+# Hive related
+*.hive
+*.lock
+
+# Generated files
+lib/generated/
+test/generated/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local environment files
+.env
+.env.local
+
+# Package specific
+*.tar.gz
+*.zip
