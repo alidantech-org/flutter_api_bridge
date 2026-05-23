@@ -1,7 +1,6 @@
 name: flutter_api_bridge
 description: A lightweight and extensible HTTP client wrapper for Dart and Flutter with built-in cookie management, state management, and local caching.
 version: 0.1.0
-publish_to: https://pub.dev
 repository: https://github.com/alidantech-org/flutter_api_bridge
 issue_tracker: https://github.com/alidantech-org/flutter_api_bridge/issues
 
