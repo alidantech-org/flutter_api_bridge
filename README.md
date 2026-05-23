@@ -1,6 +1,6 @@
-# Riderescue API SDK
+# example API SDK
 
-Flutter/Dart SDK for the Riderescue API.
+Flutter/Dart SDK for the example API.
 
 ## Installation
 
@@ -8,9 +8,9 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  riderescue_api:
+  example_api:
     git:
-      url: https://github.com/riderescue/riderescue_api_sdk.git
+      url: https://github.com/example/example_api_sdk.git
       path: packages/dart
       ref: main
 ```
@@ -20,10 +20,10 @@ dependencies:
 ### Initialization
 
 ```dart
-import 'package:riderescue_api/riderescue_api.dart';
+import 'package:example_api/example_api.dart';
 
 await Server.init(
-  baseUrl: 'https://api.riderescue.com',
+  baseUrl: 'https://api.example.com',
   authStrategy: BearerStrategy(tokenKey: 'access_token'),
   defaultCacheTtl: const Duration(minutes: 5),
 );
@@ -74,6 +74,7 @@ To regenerate the generated code:
 cd sdk/generators
 pnpm generate:dart
 ```
+
 # Dependencies to add to pubspec.yaml
 
 ```yaml
@@ -97,7 +98,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Server.init(
-    baseUrl: 'https://api.riderescue.com',
+    baseUrl: 'https://api.example.com',
     authStrategy: BearerStrategy(tokenKey: 'access_token'),
     defaultCacheTtl: Duration(minutes: 5),
   );
@@ -195,7 +196,7 @@ await Server.logout(tokenKey: 'access_token');
 
 ```dart
 Server.init(
-  baseUrl: 'https://api.riderescue.com',
+  baseUrl: 'https://api.example.com',
   defaultVersion: ApiVersion.v1,
   authStrategy: BearerStrategy(tokenKey: 'access_token'),
   cacheTtl: Duration(minutes: 5),
@@ -337,4 +338,5 @@ LinearProgressIndicator(value: progress.percent);
 ---
 
 **Are you happy with this full plan?** Once you confirm I'll write each file one at a time in order, complete and ready to copy in.
+
 # flutter_api_bridge

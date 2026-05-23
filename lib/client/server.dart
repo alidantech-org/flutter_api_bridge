@@ -12,8 +12,7 @@ import 'server_config.dart';
 
 // ── Public exports ───────────────────────────────────────────────────────────────
 
-export 'api/api_client.dart'
-    show ApiClient, AuthEvents, UnauthorizedEvent, ForbiddenEvent;
+export 'api/api_client.dart' show ApiClient, AuthEvents, UnauthorizedEvent, ForbiddenEvent;
 export 'api/api_provider.dart';
 export 'api/api_request_options.dart';
 export 'auth/auth_strategy.dart';
@@ -31,7 +30,7 @@ class Server {
   ///
   /// ```dart
   /// await Server.init(
-  ///   baseUrl: 'https://api.riderescue.com',
+  ///   baseUrl: 'https://api.example.com',
   ///   authStrategy: BearerStrategy(tokenKey: 'access_token'),
   ///   defaultCacheTtl: Duration(minutes: 5),
   /// );
