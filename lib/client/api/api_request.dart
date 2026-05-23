@@ -114,7 +114,8 @@ class GetRequest<T> extends ApiRequest<T> {
   bool get invalidateCache => getOptions?.invalidateCache ?? false;
 
   String get cacheKey {
-    final queryString = query?.entries.map((entry) => '${entry.key}=${entry.value}').join('&');
+    final queryString =
+        query?.entries.map((entry) => '${entry.key}=${entry.value}').join('&');
 
     return '${version}$endpoint${queryString ?? ''}';
   }

@@ -12,13 +12,20 @@ import 'server_config.dart';
 
 // ── Public exports ───────────────────────────────────────────────────────────────
 
-export 'api/api_client.dart' show ApiClient, AuthEvents, UnauthorizedEvent, ForbiddenEvent;
+export 'api/api_client.dart'
+    show ApiClient, AuthEvents, UnauthorizedEvent, ForbiddenEvent;
+export 'api/api_cache.dart';
+export 'api/api_envelope.dart';
 export 'api/api_provider.dart';
+export 'api/api_request.dart';
 export 'api/api_request_options.dart';
+export 'api/api_result.dart';
 export 'auth/auth_strategy.dart';
+export 'cookies/cookie_events.dart';
 export 'cookies/cookie_manager.dart';
 export 'server_config.dart';
 export 'upload/upload_provider.dart';
+export 'upload/upload_progress.dart';
 
 // ── Initialisation ─────────────────────────────────────────────────────────────
 

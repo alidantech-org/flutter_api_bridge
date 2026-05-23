@@ -23,13 +23,17 @@ class ForbiddenEvent {
 class AuthEvents {
   AuthEvents._();
 
-  static final _unauthorizedController = StreamController<UnauthorizedEvent>.broadcast();
-  static final _forbiddenController = StreamController<ForbiddenEvent>.broadcast();
+  static final _unauthorizedController =
+      StreamController<UnauthorizedEvent>.broadcast();
+  static final _forbiddenController =
+      StreamController<ForbiddenEvent>.broadcast();
 
-  static Stream<UnauthorizedEvent> get onUnauthorized => _unauthorizedController.stream;
+  static Stream<UnauthorizedEvent> get onUnauthorized =>
+      _unauthorizedController.stream;
   static Stream<ForbiddenEvent> get onForbidden => _forbiddenController.stream;
 
-  static void emitUnauthorized(UnauthorizedEvent e) => _unauthorizedController.add(e);
+  static void emitUnauthorized(UnauthorizedEvent e) =>
+      _unauthorizedController.add(e);
   static void emitForbidden(ForbiddenEvent e) => _forbiddenController.add(e);
 
   static Future<void> dispose() async {
@@ -51,7 +55,8 @@ class ApiClient {
   static final Map<String, Dio> _instances = {};
 
   /// Internal — called by [Server.init].
-  static void init({required String baseUrl, required AuthStrategy authStrategy}) {
+  static void init(
+      {required String baseUrl, required AuthStrategy authStrategy}) {
     _baseUrl = baseUrl;
     _authStrategy = authStrategy;
   }
@@ -59,7 +64,8 @@ class ApiClient {
   /// Returns the Dio instance for [version].
   /// Creates it on first access, returns cached instance thereafter.
   static Dio instance(String version) {
-    assert(_baseUrl != null, 'ApiClient not initialised. Call Server.init() first.');
+    assert(_baseUrl != null,
+        'ApiClient not initialised. Call Server.init() first.');
     return _instances.putIfAbsent(version, () => _create(version));
   }
 
@@ -69,7 +75,10 @@ class ApiClient {
         baseUrl: '$_baseUrl${version}',
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
       ),
     );
 
@@ -105,7 +114,8 @@ class _AuthInterceptor extends Interceptor {
   final AuthStrategy _strategy;
 
   @override
-  Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  Future<void> onRequest(
+      RequestOptions options, RequestInterceptorHandler handler) async {
     final noAuth = options.extra['noAuth'] as bool? ?? false;
     if (!noAuth) await _strategy.apply(options);
     handler.next(options);

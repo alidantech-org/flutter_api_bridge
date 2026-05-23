@@ -7,7 +7,7 @@ issue_tracker: https://github.com/alidantech-org/flutter_api_bridge/issues
 
 environment:
   sdk: ^3.6.0
-  flutter: '>=3.24.0'
+  flutter: '>=3.27.0'
 
 dependencies:
   flutter:
@@ -27,6 +27,8 @@ dependencies:
   path_provider: ^2.1.4
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   # Code generation for Hive models and Riverpod providers
   build_runner: ^2.4.13
   # Hive adapter generator for type safety
