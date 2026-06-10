@@ -74,6 +74,28 @@ void main() {
       expect(result.message, 'Request failed');
       expect(handledError, 'Not found');
     });
+
+    test('ifSuccess only runs for successful results', () {
+      const success = ApiSuccess<int>(
+        message: 'Created',
+        statusCode: 201,
+        data: 7,
+      );
+      const error = ApiError<int>(
+        message: 'Invalid',
+        error: 'Validation failed',
+        statusCode: 422,
+      );
+
+      var successValue = 0;
+      var errorCallbackRan = false;
+
+      success.ifSuccess((data, _) => successValue = data ?? -1);
+      error.ifSuccess((_, __) => errorCallbackRan = true);
+
+      expect(successValue, 7);
+      expect(errorCallbackRan, isFalse);
+    });
   });
 
   group('ApiEnvelope', () {
@@ -96,9 +118,40 @@ void main() {
       expect(envelope.message, isEmpty);
       expect(envelope.raw, isNull);
     });
+
+    test('copyWith overrides selected fields and preserves the rest', () {
+      final envelope = const ApiEnvelope(
+        success: false,
+        message: 'Initial',
+        raw: {'code': 'old'},
+      ).copyWith(
+        success: true,
+        message: 'Updated',
+      );
+
+      expect(envelope.success, isTrue);
+      expect(envelope.message, 'Updated');
+      expect(envelope.raw, {'code': 'old'});
+    });
   });
 
   group('ApiRequest', () {
+    test('GetRequest uses safe defaults when options are omitted', () {
+      const request = GetRequest<Map<String, Object?>>(
+        endpoint: '/todos/1',
+      );
+
+      expect(request.version, isEmpty);
+      expect(request.fullPath, '/todos/1');
+      expect(request.cacheKey, '/todos/1');
+      expect(request.cache, isTrue);
+      expect(request.cacheTtl, isNull);
+      expect(request.forceRefresh, isFalse);
+      expect(request.invalidateCache, isFalse);
+      expect(request.noAuth, isFalse);
+      expect(request.headers, isNull);
+    });
+
     test('GetRequest builds versioned paths and cache keys', () {
       const request = GetRequest<Map<String, Object?>>(
         endpoint: '/todos',
@@ -122,6 +175,22 @@ void main() {
       expect(request.headers, {'x-client': 'test'});
     });
 
+    test('GetRequest accepts dynamic query maps for generated SDK callers', () {
+      final query = <dynamic, dynamic>{
+        'search': 'oil',
+        'page': 2,
+        7: 'numeric-key',
+      };
+      final request = GetRequest<Map<String, Object?>>(
+        endpoint: '/services',
+        version: '/v1',
+        query: query,
+      );
+
+      expect(request.query, same(query));
+      expect(request.cacheKey, '/v1/servicessearch=oil&page=2&7=numeric-key');
+    });
+
     test('mutation requests keep body, query, options, and parser', () {
       final request = PostRequest<Map<String, Object?>>(
         endpoint: '/posts',
@@ -136,6 +205,53 @@ void main() {
       expect(request.body, {'title': 'Hello'});
       expect(request.noAuth, isTrue);
       expect(request.fromJson!(jsonPlaceholderTodo), jsonPlaceholderTodo);
+    });
+
+    test('all mutation request types expose their body and full path', () {
+      const put = PutRequest<Map<String, Object?>>(
+        endpoint: '/posts/1',
+        version: '/v1',
+        body: {'title': 'Updated'},
+      );
+      const patch = PatchRequest<Map<String, Object?>>(
+        endpoint: '/posts/1',
+        version: '/v1',
+        body: {'completed': true},
+      );
+      const delete = DeleteRequest<Map<String, Object?>>(
+        endpoint: '/posts/1',
+        version: '/v1',
+        body: {'reason': 'duplicate'},
+      );
+
+      expect(put.fullPath, '/v1/posts/1');
+      expect(put.body, {'title': 'Updated'});
+      expect(patch.fullPath, '/v1/posts/1');
+      expect(patch.body, {'completed': true});
+      expect(delete.fullPath, '/v1/posts/1');
+      expect(delete.body, {'reason': 'duplicate'});
+    });
+
+    test('mutation requests accept dynamic body maps', () {
+      final body = <dynamic, dynamic>{'title': 'Updated'};
+      final request = PutRequest<Map<String, Object?>>(
+        endpoint: '/posts/1',
+        body: body,
+      );
+
+      expect(request.body, same(body));
+    });
+
+    test('ApiRequestOptions defaults to authenticated requests', () {
+      const baseOptions = ApiRequestOptions();
+      const getOptions = ApiGetRequestOptions();
+
+      expect(baseOptions.noAuth, isFalse);
+      expect(baseOptions.headers, isNull);
+      expect(getOptions.noAuth, isFalse);
+      expect(getOptions.cache, isTrue);
+      expect(getOptions.forceRefresh, isFalse);
+      expect(getOptions.invalidateCache, isFalse);
     });
   });
 
@@ -225,6 +341,28 @@ void main() {
     });
   });
 
+  group('ServerConfig', () {
+    test('stores mutable package-level configuration', () {
+      final previousBaseUrl = ServerConfig.baseUrl;
+      final previousTtl = ServerConfig.defaultCacheTtl;
+      final previousApiKey = ServerConfig.apiKey;
+
+      addTearDown(() {
+        ServerConfig.baseUrl = previousBaseUrl;
+        ServerConfig.defaultCacheTtl = previousTtl;
+        ServerConfig.apiKey = previousApiKey;
+      });
+
+      ServerConfig.baseUrl = 'https://jsonplaceholder.typicode.com';
+      ServerConfig.defaultCacheTtl = const Duration(seconds: 30);
+      ServerConfig.apiKey = 'test-key';
+
+      expect(ServerConfig.baseUrl, 'https://jsonplaceholder.typicode.com');
+      expect(ServerConfig.defaultCacheTtl, const Duration(seconds: 30));
+      expect(ServerConfig.apiKey, 'test-key');
+    });
+  });
+
   group('Events', () {
     test('AuthEvents emits unauthorized and forbidden events', () async {
       final unauthorized = expectLater(
@@ -265,6 +403,25 @@ void main() {
 
       await refreshToken;
     });
+
+    test('CookieEvents emits clear events', () async {
+      final cleared = expectLater(
+        CookieEvents.onCookiesCleared,
+        emits(
+          isA<CookiesClearedEvent>().having(
+            (event) => event.domain,
+            'domain',
+            'example.com',
+          ),
+        ),
+      );
+
+      CookieEvents.emitCleared(
+        const CookiesClearedEvent(domain: 'example.com'),
+      );
+
+      await cleared;
+    });
   });
 
   group('Uploads', () {
@@ -302,6 +459,43 @@ void main() {
       expect(streamFile.key, 'document');
       expect(streamFile.value.filename, 'todo.txt');
       expect(streamFile.value.length, 4);
+    });
+
+    test('UploadFile converts file paths to multipart files', () async {
+      final file = File('${hiveDirectory.path}/todo-upload.txt');
+      await file.writeAsString('todo file body');
+
+      final multipart = await UploadFile.fromPath(
+        field: 'attachment',
+        path: file.path,
+        filename: 'todo-upload.txt',
+      ).toMultipart();
+
+      expect(multipart.key, 'attachment');
+      expect(multipart.value.filename, 'todo-upload.txt');
+      expect(multipart.value.length, 14);
+    });
+
+    test('UploadFile from stream exposes configured length', () {
+      const file = UploadFile.fromStream(
+        field: 'document',
+        stream: Stream<List<int>>.empty(),
+        filename: 'empty.txt',
+        length: 12,
+      );
+
+      expect(file.length, 12);
+      expect(file.path, isNull);
+      expect(file.bytes, isNull);
+    });
+
+    test('UploadProgress handles unknown totals without completing', () {
+      const progress = UploadProgress(sent: 25, total: 0);
+
+      expect(progress.percent, 0);
+      expect(progress.isDone, isFalse);
+      expect(progress.totalMB, 0);
+      expect(progress.toString(), contains('0.0%'));
     });
 
     test('UploadRequest keeps files, fields, method, and options', () {

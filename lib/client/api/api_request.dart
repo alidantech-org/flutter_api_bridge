@@ -1,6 +1,7 @@
 // lib/server/api/api_request.dart
 import 'package:dio/dio.dart';
 
+import 'api_normalizer.dart';
 import 'api_request_options.dart';
 
 // ─── Upload file descriptor ────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ class UploadFile {
       );
     }
 
-    throw StateError('UploadFile has no source (path, bytes, or stream).');
+    throw StateError('UploadFile has no source: path, bytes, or stream.');
   }
 }
 
@@ -85,13 +86,13 @@ sealed class ApiRequest<T> {
   final String endpoint;
   final String version;
   final T Function(dynamic json)? fromJson;
-  final Map<String, dynamic>? query;
+  final Object? query;
   final ApiRequestOptions? options;
 
   bool get noAuth => options?.noAuth ?? false;
   Map<String, String>? get headers => options?.headers;
 
-  String get fullPath => '${version}$endpoint';
+  String get fullPath => '$version$endpoint';
 }
 
 // ── GET ────────────────────────────────────────────────────────────────────────
@@ -114,10 +115,13 @@ class GetRequest<T> extends ApiRequest<T> {
   bool get invalidateCache => getOptions?.invalidateCache ?? false;
 
   String get cacheKey {
-    final queryString =
-        query?.entries.map((entry) => '${entry.key}=${entry.value}').join('&');
+    final queryString = stableQueryString(query);
 
-    return '${version}$endpoint${queryString ?? ''}';
+    if (queryString.isEmpty) {
+      return '$version$endpoint';
+    }
+
+    return '$version$endpoint?$queryString';
   }
 }
 
@@ -133,7 +137,7 @@ class PostRequest<T> extends ApiRequest<T> {
     this.body,
   });
 
-  final Map<String, dynamic>? body;
+  final Object? body;
 }
 
 // ── PUT ────────────────────────────────────────────────────────────────────────
@@ -148,7 +152,7 @@ class PutRequest<T> extends ApiRequest<T> {
     this.body,
   });
 
-  final Map<String, dynamic>? body;
+  final Object? body;
 }
 
 // ── PATCH ──────────────────────────────────────────────────────────────────────
@@ -163,7 +167,7 @@ class PatchRequest<T> extends ApiRequest<T> {
     this.body,
   });
 
-  final Map<String, dynamic>? body;
+  final Object? body;
 }
 
 // ── DELETE ─────────────────────────────────────────────────────────────────────
@@ -178,7 +182,7 @@ class DeleteRequest<T> extends ApiRequest<T> {
     this.body,
   });
 
-  final Map<String, dynamic>? body;
+  final Object? body;
 }
 
 // ── UPLOAD ────────────────────────────────────────────────────────────────────
@@ -189,6 +193,7 @@ class UploadRequest<T> extends ApiRequest<T> {
     super.fromJson,
     required this.files,
     super.version = '',
+    super.query,
     super.options,
     this.fields,
     this.method = UploadMethod.post,
@@ -199,4 +204,4 @@ class UploadRequest<T> extends ApiRequest<T> {
   final UploadMethod method;
 }
 
-enum UploadMethod { post, put }
+enum UploadMethod { post, put, patch }
