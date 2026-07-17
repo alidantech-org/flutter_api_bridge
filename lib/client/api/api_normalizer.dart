@@ -60,11 +60,7 @@ Map<String, dynamic>? buildDioQueryParameters(Object? query) {
   final output = <String, dynamic>{};
 
   for (final entry in normalized.entries) {
-    flattenQueryEntry(
-      output: output,
-      key: entry.key,
-      value: entry.value,
-    );
+    flattenQueryEntry(output: output, key: entry.key, value: entry.value);
   }
 
   if (output.isEmpty) return null;
@@ -139,7 +135,10 @@ dynamic normalizeValue(dynamic value) {
   }
 
   if (value is Iterable && value is! String) {
-    return value.map(normalizeValue).where((item) => !shouldSkipValue(item)).toList();
+    return value
+        .map(normalizeValue)
+        .where((item) => !shouldSkipValue(item))
+        .toList();
   }
 
   return value;
@@ -236,9 +235,7 @@ Map<String, dynamic>? asResponseMap(dynamic value) {
   }
 
   if (source is Map) {
-    return source.map(
-      (key, val) => MapEntry(key.toString(), val),
-    );
+    return source.map((key, val) => MapEntry(key.toString(), val));
   }
 
   return null;
@@ -274,7 +271,11 @@ dynamic tryToJson(dynamic value) {
 
     if (json == null) return null;
 
-    if (json is Map || json is Iterable || json is String || json is num || json is bool) {
+    if (json is Map ||
+        json is Iterable ||
+        json is String ||
+        json is num ||
+        json is bool) {
       return json;
     }
 

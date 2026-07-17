@@ -67,8 +67,13 @@ class CookieManager {
   static Future<void> set(Cookie cookie) async {
     _assertInit();
     await _jar!.saveFromResponse(_uri, [cookie]);
-    CookieEvents.emitChanged(CookieChangedEvent(
-        name: cookie.name, value: cookie.value, domain: _uri.host));
+    CookieEvents.emitChanged(
+      CookieChangedEvent(
+        name: cookie.name,
+        value: cookie.value,
+        domain: _uri.host,
+      ),
+    );
   }
 
   /// Convenience: set a cookie by name and value.
@@ -96,13 +101,16 @@ class CookieManager {
       await _jar!.saveFromResponse(_uri, updated);
     }
     CookieEvents.emitChanged(
-        CookieChangedEvent(name: name, value: '', domain: _uri.host));
+      CookieChangedEvent(name: name, value: '', domain: _uri.host),
+    );
   }
 
   // ── Internal ───────────────────────────────────────────────────────────────
 
   static void _assertInit() {
-    assert(_jar != null,
-        'CookieManager not initialised. Call Server.init() first.');
+    assert(
+      _jar != null,
+      'CookieManager not initialised. Call Server.init() first.',
+    );
   }
 }

@@ -35,8 +35,7 @@ class AuthEvents {
   static Stream<UnauthorizedEvent> get onUnauthorized =>
       _unauthorizedController.stream;
 
-  static Stream<ForbiddenEvent> get onForbidden =>
-      _forbiddenController.stream;
+  static Stream<ForbiddenEvent> get onForbidden => _forbiddenController.stream;
 
   static void emitUnauthorized(UnauthorizedEvent event) {
     _unauthorizedController.add(event);
@@ -148,10 +147,7 @@ class _LegacySafeLogInterceptor extends Interceptor {
   const _LegacySafeLogInterceptor();
 
   @override
-  void onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     dev.log(
       '${options.method} ${options.uri}',
       name: 'flutter_api_bridge.legacy',
@@ -175,10 +171,7 @@ class _LegacySafeLogInterceptor extends Interceptor {
   }
 
   @override
-  void onError(
-    DioException error,
-    ErrorInterceptorHandler handler,
-  ) {
+  void onError(DioException error, ErrorInterceptorHandler handler) {
     dev.log(
       '${error.requestOptions.method} ${error.requestOptions.uri} '
       'status=${error.response?.statusCode} type=${error.type.name}',

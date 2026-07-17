@@ -124,10 +124,7 @@ void main() {
         success: false,
         message: 'Initial',
         raw: {'code': 'old'},
-      ).copyWith(
-        success: true,
-        message: 'Updated',
-      );
+      ).copyWith(success: true, message: 'Updated');
 
       expect(envelope.success, isTrue);
       expect(envelope.message, 'Updated');
@@ -137,9 +134,7 @@ void main() {
 
   group('ApiRequest', () {
     test('GetRequest uses safe defaults when options are omitted', () {
-      const request = GetRequest<Map<String, Object?>>(
-        endpoint: '/todos/1',
-      );
+      const request = GetRequest<Map<String, Object?>>(endpoint: '/todos/1');
 
       expect(request.version, isEmpty);
       expect(request.fullPath, '/todos/1');
@@ -256,73 +251,76 @@ void main() {
   });
 
   group('ApiCache', () {
-    test('writes, reads, invalidates, and clears cached JSON payloads',
-        () async {
-      await ApiCache.write(
-        '/todos/1',
-        jsonPlaceholderTodo,
-        const Duration(minutes: 5),
-      );
+    test(
+      'writes, reads, invalidates, and clears cached JSON payloads',
+      () async {
+        await ApiCache.write(
+          '/todos/1',
+          jsonPlaceholderTodo,
+          const Duration(minutes: 5),
+        );
 
-      expect(ApiCache.read('/todos/1'), jsonPlaceholderTodo);
+        expect(ApiCache.read('/todos/1'), jsonPlaceholderTodo);
 
-      await ApiCache.invalidate('/todos/1');
-      expect(ApiCache.read('/todos/1'), isNull);
+        await ApiCache.invalidate('/todos/1');
+        expect(ApiCache.read('/todos/1'), isNull);
 
-      await ApiCache.write(
-        '/todos/1',
-        jsonPlaceholderTodo,
-        const Duration(minutes: 5),
-      );
-      await ApiCache.clearAll();
-      expect(ApiCache.read('/todos/1'), isNull);
-    });
+        await ApiCache.write(
+          '/todos/1',
+          jsonPlaceholderTodo,
+          const Duration(minutes: 5),
+        );
+        await ApiCache.clearAll();
+        expect(ApiCache.read('/todos/1'), isNull);
+      },
+    );
 
-    test('invalidates by endpoint pattern and evicts expired entries',
-        () async {
-      await ApiCache.write(
-        '/todos/1',
-        jsonPlaceholderTodo,
-        const Duration(minutes: 5),
-      );
-      await ApiCache.write(
-        '/users/1',
-        {'id': 1, 'name': 'Leanne Graham'},
-        const Duration(minutes: 5),
-      );
+    test(
+      'invalidates by endpoint pattern and evicts expired entries',
+      () async {
+        await ApiCache.write(
+          '/todos/1',
+          jsonPlaceholderTodo,
+          const Duration(minutes: 5),
+        );
+        await ApiCache.write('/users/1', {
+          'id': 1,
+          'name': 'Leanne Graham',
+        }, const Duration(minutes: 5));
 
-      await ApiCache.invalidateWhere('/todos');
+        await ApiCache.invalidateWhere('/todos');
 
-      expect(ApiCache.read('/todos/1'), isNull);
-      expect(ApiCache.read('/users/1'), {'id': 1, 'name': 'Leanne Graham'});
+        expect(ApiCache.read('/todos/1'), isNull);
+        expect(ApiCache.read('/users/1'), {'id': 1, 'name': 'Leanne Graham'});
 
-      await ApiCache.write(
-        '/expired',
-        {'stale': true},
-        const Duration(milliseconds: -1),
-      );
+        await ApiCache.write('/expired', {
+          'stale': true,
+        }, const Duration(milliseconds: -1));
 
-      expect(ApiCache.read('/expired'), isNull);
-    });
+        expect(ApiCache.read('/expired'), isNull);
+      },
+    );
   });
 
   group('Auth strategies', () {
-    test('BearerStrategy persists token and applies authorization header',
-        () async {
-      await BearerStrategy.saveToken('abc123', key: 'access_token');
+    test(
+      'BearerStrategy persists token and applies authorization header',
+      () async {
+        await BearerStrategy.saveToken('abc123', key: 'access_token');
 
-      final options = RequestOptions(path: '/todos/1');
-      await BearerStrategy(tokenKey: 'access_token').apply(options);
+        final options = RequestOptions(path: '/todos/1');
+        await BearerStrategy(tokenKey: 'access_token').apply(options);
 
-      expect(options.headers['Authorization'], 'Bearer abc123');
+        expect(options.headers['Authorization'], 'Bearer abc123');
 
-      await BearerStrategy.clearToken(key: 'access_token');
+        await BearerStrategy.clearToken(key: 'access_token');
 
-      final clearedOptions = RequestOptions(path: '/todos/1');
-      await BearerStrategy(tokenKey: 'access_token').apply(clearedOptions);
+        final clearedOptions = RequestOptions(path: '/todos/1');
+        await BearerStrategy(tokenKey: 'access_token').apply(clearedOptions);
 
-      expect(clearedOptions.headers, isNot(contains('Authorization')));
-    });
+        expect(clearedOptions.headers, isNot(contains('Authorization')));
+      },
+    );
 
     test('ApiKeyStrategy applies x-api-key header', () async {
       final options = RequestOptions(path: '/todos/1');
@@ -367,13 +365,19 @@ void main() {
     test('AuthEvents emits unauthorized and forbidden events', () async {
       final unauthorized = expectLater(
         AuthEvents.onUnauthorized,
-        emits(isA<UnauthorizedEvent>()
-            .having((event) => event.path, 'path', '/private')),
+        emits(
+          isA<UnauthorizedEvent>().having(
+            (event) => event.path,
+            'path',
+            '/private',
+          ),
+        ),
       );
       final forbidden = expectLater(
         AuthEvents.onForbidden,
-        emits(isA<ForbiddenEvent>()
-            .having((event) => event.path, 'path', '/admin')),
+        emits(
+          isA<ForbiddenEvent>().having((event) => event.path, 'path', '/admin'),
+        ),
       );
 
       AuthEvents.emitUnauthorized(const UnauthorizedEvent(path: '/private'));
@@ -511,10 +515,7 @@ void main() {
         ],
         fields: {'title': 'Todo'},
         method: UploadMethod.put,
-        options: ApiRequestOptions(
-          noAuth: true,
-          headers: {'x-upload': 'yes'},
-        ),
+        options: ApiRequestOptions(noAuth: true, headers: {'x-upload': 'yes'}),
       );
 
       expect(request.fullPath, '/v1/uploads');

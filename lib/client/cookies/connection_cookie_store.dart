@@ -7,10 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 /// Token-free description of one persisted cookie credential.
 class AuthCookieSnapshot {
-  const AuthCookieSnapshot({
-    required this.exists,
-    this.expiresAt,
-  });
+  const AuthCookieSnapshot({required this.exists, this.expiresAt});
 
   final bool exists;
   final DateTime? expiresAt;

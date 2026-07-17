@@ -17,11 +17,10 @@ class ApiRequestOptions {
 
   /// Convenience for login, signup, password reset, health, and other public
   /// endpoints. A failed login must never trigger refresh of an older session.
-  const ApiRequestOptions.unauthenticated({
-    this.headers,
-  })  : noAuth = true,
-        authPolicy = ApiAuthPolicy.none,
-        retryOnUnauthorized = false;
+  const ApiRequestOptions.unauthenticated({this.headers})
+    : noAuth = true,
+      authPolicy = ApiAuthPolicy.none,
+      retryOnUnauthorized = false;
 
   final Map<String, String>? headers;
 

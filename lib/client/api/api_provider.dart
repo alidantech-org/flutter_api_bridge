@@ -13,9 +13,10 @@ import 'api_result.dart';
 
 // ─── Provider ──────────────────────────────────────────────────────────────────
 
-final apiProvider = StateNotifierProvider<ApiNotifier, AsyncValue<ApiResult<dynamic>>>(
-  (ref) => ApiNotifier(),
-);
+final apiProvider =
+    StateNotifierProvider<ApiNotifier, AsyncValue<ApiResult<dynamic>>>(
+      (ref) => ApiNotifier(),
+    );
 
 // ─── Notifier ──────────────────────────────────────────────────────────────────
 
@@ -75,10 +76,7 @@ class ApiNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
       final response = await dio.get(
         request.endpoint,
         queryParameters: buildDioQueryParameters(request.query),
-        options: _options(
-          headers: request.headers,
-          noAuth: request.noAuth,
-        ),
+        options: _options(headers: request.headers, noAuth: request.noAuth),
       );
 
       final raw = asResponseMap(response.data);
@@ -213,9 +211,7 @@ class ApiNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
       method: method,
       headers: headers,
       contentType: contentType,
-      extra: {
-        'noAuth': noAuth,
-      },
+      extra: {'noAuth': noAuth},
     );
   }
 
@@ -306,11 +302,7 @@ class ApiNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
 
     final error = _extractDioError(e, raw);
 
-    dev.log(
-      '[api] DioError: $message — $error',
-      name: 'server',
-      level: 900,
-    );
+    dev.log('[api] DioError: $message — $error', name: 'server', level: 900);
 
     final result = ApiError<T>(
       message: message,

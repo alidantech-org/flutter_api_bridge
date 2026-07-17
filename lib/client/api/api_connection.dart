@@ -25,10 +25,10 @@ class ApiConnection {
     required ConnectionCookieStore cookies,
     required ApiLogger logger,
     required this.auth,
-  })  : _client = client,
-        _refreshClient = refreshClient,
-        _cookies = cookies,
-        _logger = logger;
+  }) : _client = client,
+       _refreshClient = refreshClient,
+       _cookies = cookies,
+       _logger = logger;
 
   final String key;
   final ApiBridgeConfig config;
@@ -82,10 +82,7 @@ class ApiConnection {
     );
 
     client.interceptors.add(
-      _ConnectionAuthInterceptor(
-        connection: connection,
-        auth: auth,
-      ),
+      _ConnectionAuthInterceptor(connection: connection, auth: auth),
     );
     client.interceptors.add(
       _ConnectionLoggingInterceptor(logger: logger, config: config.logging),
@@ -132,9 +129,9 @@ class ApiConnection {
       DeleteRequest<T> value => _mutate(value, 'DELETE', value.body),
       UploadRequest<T> value => _upload(value),
       _ => ApiError<T>(
-          message: 'Unsupported request type',
-          error: 'Unsupported request type: ${request.runtimeType}',
-        ),
+        message: 'Unsupported request type',
+        error: 'Unsupported request type: ${request.runtimeType}',
+      ),
     };
   }
 
@@ -265,10 +262,9 @@ class ApiConnection {
   }) {
     final requestId = _nextRequestId();
     final requestOptions = request.options;
-    final usesAuthentication =
-        requestOptions?.usesAuthentication ?? true;
-    final retry = retryOverride ??
-        (requestOptions?.retryOnUnauthorized ?? true);
+    final usesAuthentication = requestOptions?.usesAuthentication ?? true;
+    final retry =
+        retryOverride ?? (requestOptions?.retryOnUnauthorized ?? true);
 
     return Options(
       method: method,
@@ -358,10 +354,7 @@ class ApiConnection {
     );
   }
 
-  ApiResult<T> _handleUnexpected<T>(
-    Object error,
-    StackTrace stackTrace,
-  ) {
+  ApiResult<T> _handleUnexpected<T>(Object error, StackTrace stackTrace) {
     _logger.log(
       ApiLogLevel.error,
       ApiLogCategory.request,
@@ -375,20 +368,14 @@ class ApiConnection {
     );
   }
 
-  String _extractMessage(
-    Map<String, dynamic>? raw, {
-    String fallback = '',
-  }) {
+  String _extractMessage(Map<String, dynamic>? raw, {String fallback = ''}) {
     final value = raw?['message'];
     if (value is String) return value;
     if (value is List) return value.whereType<String>().join(', ');
     return fallback;
   }
 
-  String _extractDioError(
-    DioException error,
-    Map<String, dynamic>? raw,
-  ) {
+  String _extractDioError(DioException error, Map<String, dynamic>? raw) {
     final rawError = raw?['error'];
     if (rawError is String && rawError.trim().isNotEmpty) return rawError;
 
@@ -437,10 +424,7 @@ class ApiConnection {
 }
 
 class _ConnectionAuthInterceptor extends Interceptor {
-  _ConnectionAuthInterceptor({
-    required this.connection,
-    required this.auth,
-  });
+  _ConnectionAuthInterceptor({required this.connection, required this.auth});
 
   final ApiConnection connection;
   final ApiAuth auth;
@@ -520,10 +504,7 @@ class _ConnectionAuthInterceptor extends Interceptor {
     final retryAllowed = options.extra['bridge.retryOnUnauthorized'] == true;
     final retryCount = options.extra['bridge.retryCount'] as int? ?? 0;
 
-    if (skipRefresh ||
-        !retryAllowed ||
-        retryCount >= 1 ||
-        !authWasApplied) {
+    if (skipRefresh || !retryAllowed || retryCount >= 1 || !authWasApplied) {
       if (authWasApplied && retryCount >= 1) {
         await auth.markExpired(reason: 'unauthorized_after_refresh');
       }
@@ -534,9 +515,11 @@ class _ConnectionAuthInterceptor extends Interceptor {
     try {
       final requestRevision =
           options.extra['bridge.authRevision'] as int? ?? -1;
-      final credentialsAlreadyChanged = auth.current.isAuthenticated &&
+      final credentialsAlreadyChanged =
+          auth.current.isAuthenticated &&
           auth.current.revision != requestRevision;
-      final refreshed = credentialsAlreadyChanged ||
+      final refreshed =
+          credentialsAlreadyChanged ||
           await auth.refresh(reason: 'http_$status');
 
       if (!refreshed) {
@@ -557,19 +540,13 @@ class _ConnectionAuthInterceptor extends Interceptor {
 }
 
 class _ConnectionLoggingInterceptor extends Interceptor {
-  _ConnectionLoggingInterceptor({
-    required this.logger,
-    required this.config,
-  });
+  _ConnectionLoggingInterceptor({required this.logger, required this.config});
 
   final ApiLogger logger;
   final ApiLoggingConfig config;
 
   @override
-  void onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     options.extra['bridge.startedAt'] = DateTime.now().toUtc();
     final requestId = options.extra['bridge.requestId']?.toString();
 
@@ -585,8 +562,7 @@ class _ConnectionLoggingInterceptor extends Interceptor {
           'query': logger.redactor.value(options.queryParameters),
         if (config.logRequestHeaders)
           'headers': logger.redactor.headers(options.headers),
-        if (config.logRequestBody)
-          'body': logger.redactor.body(options.data),
+        if (config.logRequestBody) 'body': logger.redactor.body(options.data),
         'retryCount': options.extra['bridge.retryCount'] ?? 0,
         'authApplied': options.extra['bridge.authApplied'] == true,
       },
@@ -617,18 +593,14 @@ class _ConnectionLoggingInterceptor extends Interceptor {
       metadata: <String, Object?>{
         if (config.logResponseHeaders)
           'headers': logger.redactor.value(response.headers.map),
-        if (config.logResponseBody)
-          'body': logger.redactor.body(response.data),
+        if (config.logResponseBody) 'body': logger.redactor.body(response.data),
       },
     );
     handler.next(response);
   }
 
   @override
-  void onError(
-    DioException error,
-    ErrorInterceptorHandler handler,
-  ) {
+  void onError(DioException error, ErrorInterceptorHandler handler) {
     final options = error.requestOptions;
     final startedAt = options.extra['bridge.startedAt'];
     final duration = startedAt is DateTime

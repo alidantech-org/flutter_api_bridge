@@ -14,19 +14,24 @@ class ApiEnvelope {
     if (responseBody is Map) {
       final map = Map<String, dynamic>.from(responseBody);
       return ApiEnvelope(
-          success: map['success'] == true,
-          message: map['message']?.toString() ?? '',
-          raw: map);
+        success: map['success'] == true,
+        message: map['message']?.toString() ?? '',
+        raw: map,
+      );
     }
 
     return const ApiEnvelope(success: true, message: '', raw: null);
   }
 
-  ApiEnvelope copyWith(
-      {bool? success, String? message, Map<String, dynamic>? raw}) {
+  ApiEnvelope copyWith({
+    bool? success,
+    String? message,
+    Map<String, dynamic>? raw,
+  }) {
     return ApiEnvelope(
-        success: success ?? this.success,
-        message: message ?? this.message,
-        raw: raw ?? this.raw);
+      success: success ?? this.success,
+      message: message ?? this.message,
+      raw: raw ?? this.raw,
+    );
   }
 }

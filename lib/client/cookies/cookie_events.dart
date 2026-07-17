@@ -3,8 +3,11 @@ import 'dart:async';
 
 /// Emitted whenever any cookie is added or updated.
 class CookieChangedEvent {
-  const CookieChangedEvent(
-      {required this.name, required this.value, required this.domain});
+  const CookieChangedEvent({
+    required this.name,
+    required this.value,
+    required this.domain,
+  });
   final String name;
   final String value;
   final String domain;

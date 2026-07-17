@@ -131,10 +131,8 @@ class ApiLogEvent {
 
 /// Emits redacted log records for one named API connection.
 class ApiLogger {
-  ApiLogger({
-    required this.connectionKey,
-    required this.config,
-  }) : redactor = ApiLogRedactor(config);
+  ApiLogger({required this.connectionKey, required this.config})
+    : redactor = ApiLogRedactor(config);
 
   final String connectionKey;
   final ApiLoggingConfig config;
@@ -203,8 +201,8 @@ class ApiLogger {
 /// logging sink.
 class ApiLogRedactor {
   ApiLogRedactor(this.config)
-      : _headers = config.redactedHeaders.map(_normalizeKey).toSet(),
-        _fields = config.redactedFields.map(_normalizeKey).toSet();
+    : _headers = config.redactedHeaders.map(_normalizeKey).toSet(),
+      _fields = config.redactedFields.map(_normalizeKey).toSet();
 
   static const String redacted = '<redacted>';
 
@@ -241,13 +239,20 @@ class ApiLogRedactor {
 
     if (source is FormData) {
       return <String, Object?>{
-        'fields': source.fields.map((entry) => MapEntry(entry.key, _redactField(entry.key, entry.value))).toList(),
+        'fields': source.fields
+            .map(
+              (entry) =>
+                  MapEntry(entry.key, _redactField(entry.key, entry.value)),
+            )
+            .toList(),
         'files': source.files
-            .map((entry) => <String, Object?>{
-                  'field': entry.key,
-                  'filename': entry.value.filename,
-                  'length': entry.value.length,
-                })
+            .map(
+              (entry) => <String, Object?>{
+                'field': entry.key,
+                'filename': entry.value.filename,
+                'length': entry.value.length,
+              },
+            )
             .toList(),
       };
     }
@@ -262,14 +267,18 @@ class ApiLogRedactor {
     }
 
     if (source is Iterable) {
-      return source.take(100).map((item) => value(item)).toList(growable: false);
+      return source
+          .take(100)
+          .map((item) => value(item))
+          .toList(growable: false);
     }
 
     if (source is String) {
       final text = source.trim();
       if (text.isEmpty) return text;
 
-      if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+      if ((text.startsWith('{') && text.endsWith('}')) ||
+          (text.startsWith('[') && text.endsWith(']'))) {
         try {
           return value(jsonDecode(text));
         } catch (_) {

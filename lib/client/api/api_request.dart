@@ -12,26 +12,26 @@ class UploadFile {
     required this.field,
     required this.path,
     this.filename,
-  })  : bytes = null,
-        stream = null,
-        _length = null;
+  }) : bytes = null,
+       stream = null,
+       _length = null;
 
   const UploadFile.fromBytes({
     required this.field,
     required this.bytes,
     required this.filename,
-  })  : path = null,
-        stream = null,
-        _length = null;
+  }) : path = null,
+       stream = null,
+       _length = null;
 
   const UploadFile.fromStream({
     required this.field,
     required this.stream,
     required this.filename,
     required int length,
-  })  : path = null,
-        bytes = null,
-        _length = length;
+  }) : path = null,
+       bytes = null,
+       _length = length;
 
   final String field;
   final String? filename;
@@ -60,11 +60,7 @@ class UploadFile {
     if (stream != null) {
       return MapEntry(
         field,
-        MultipartFile.fromStream(
-          () => stream!,
-          length,
-          filename: filename,
-        ),
+        MultipartFile.fromStream(() => stream!, length, filename: filename),
       );
     }
 
@@ -104,8 +100,8 @@ class GetRequest<T> extends ApiRequest<T> {
     super.version = '',
     super.query,
     ApiGetRequestOptions? options,
-  })  : getOptions = options,
-        super(options: options);
+  }) : getOptions = options,
+       super(options: options);
 
   final ApiGetRequestOptions? getOptions;
 

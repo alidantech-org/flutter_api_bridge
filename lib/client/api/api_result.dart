@@ -19,25 +19,24 @@ sealed class ApiResult<T> {
 
   /// Convenience: get data or null.
   T? get dataOrNull => switch (this) {
-        ApiSuccess<T> s => s.data,
-        ApiError<T> _ => null,
-      };
+    ApiSuccess<T> s => s.data,
+    ApiError<T> _ => null,
+  };
 
   /// Convenience: get message regardless of outcome.
   String get message => switch (this) {
-        ApiSuccess<T> s => s.message,
-        ApiError<T> e => e.message,
-      };
+    ApiSuccess<T> s => s.message,
+    ApiError<T> e => e.message,
+  };
 
   /// Pattern-match helper — mirrors Riverpod's AsyncValue.when()
   R when<R>({
     required R Function(T? data, String message, int statusCode) success,
     required R Function(String error, String message, int? statusCode) error,
-  }) =>
-      switch (this) {
-        ApiSuccess<T> s => success(s.data, s.message, s.statusCode),
-        ApiError<T> e => error(e.error, e.message, e.statusCode),
-      };
+  }) => switch (this) {
+    ApiSuccess<T> s => success(s.data, s.message, s.statusCode),
+    ApiError<T> e => error(e.error, e.message, e.statusCode),
+  };
 
   /// Pattern-match helper — only handle success, ignore error.
   void ifSuccess(void Function(T? data, String message) callback) {
@@ -52,8 +51,12 @@ sealed class ApiResult<T> {
 
 /// A successful API response.
 final class ApiSuccess<T> extends ApiResult<T> {
-  const ApiSuccess(
-      {required this.message, required this.statusCode, this.data, this.raw});
+  const ApiSuccess({
+    required this.message,
+    required this.statusCode,
+    this.data,
+    this.raw,
+  });
 
   /// Server message e.g. "Login successful" — use in snackbars.
   final String message;
@@ -70,8 +73,12 @@ final class ApiSuccess<T> extends ApiResult<T> {
 
 /// A failed API response.
 final class ApiError<T> extends ApiResult<T> {
-  const ApiError(
-      {required this.message, required this.error, this.statusCode, this.raw});
+  const ApiError({
+    required this.message,
+    required this.error,
+    this.statusCode,
+    this.raw,
+  });
 
   /// Server message if available, otherwise a generic fallback.
   final String message;

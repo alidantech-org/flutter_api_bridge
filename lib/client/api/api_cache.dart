@@ -35,10 +35,10 @@ class _HiveEntry {
   bool get isExpired => DateTime.now().millisecondsSinceEpoch > expiresAtMs;
 
   Map<String, dynamic> toMap() => {
-        'originalKey': originalKey,
-        'data': ApiCache._normalizeForHive(data),
-        'expiresAtMs': expiresAtMs,
-      };
+    'originalKey': originalKey,
+    'data': ApiCache._normalizeForHive(data),
+    'expiresAtMs': expiresAtMs,
+  };
 
   static _HiveEntry? fromMap(dynamic value) {
     if (value is! Map) return null;
@@ -152,8 +152,10 @@ class ApiCache {
   /// Remove all entries whose original key contains [pattern].
   /// Useful for invalidating a whole endpoint family e.g. `/v1/brands`.
   static Future<void> invalidateWhere(String pattern) async {
-    final memKeys =
-        _memory.entries.where((entry) => entry.value.originalKey.contains(pattern)).map((entry) => entry.key).toList();
+    final memKeys = _memory.entries
+        .where((entry) => entry.value.originalKey.contains(pattern))
+        .map((entry) => entry.key)
+        .toList();
 
     for (final key in memKeys) {
       _memory.remove(key);
@@ -204,7 +206,9 @@ class ApiCache {
   }
 
   static String _readablePart(String key) {
-    final safe = key.replaceAll(RegExp(r'[^a-zA-Z0-9._~/-]+'), '_').replaceAll(RegExp(r'_+'), '_');
+    final safe = key
+        .replaceAll(RegExp(r'[^a-zA-Z0-9._~/-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
 
     if (safe.length <= 100) return safe;
 
@@ -274,9 +278,7 @@ class ApiCache {
 
   static dynamic _normalizeFromHive(dynamic value) {
     if (value is Map<String, dynamic>) {
-      return value.map(
-        (key, val) => MapEntry(key, _normalizeFromHive(val)),
-      );
+      return value.map((key, val) => MapEntry(key, _normalizeFromHive(val)));
     }
 
     if (value is Map) {

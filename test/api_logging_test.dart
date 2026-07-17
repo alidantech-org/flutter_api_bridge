@@ -26,15 +26,17 @@ void main() {
     });
 
     test('redacts nested authentication and password fields', () {
-      final body = redactor.body(<String, Object?>{
-        'email': 'person@example.com',
-        'password': 'unsafe-password',
-        'profile': <String, Object?>{
-          'access_token': 'unsafe-access',
-          'refreshToken': 'unsafe-refresh',
-          'displayName': 'Safe Name',
-        },
-      })! as Map<String, Object?>;
+      final body =
+          redactor.body(<String, Object?>{
+                'email': 'person@example.com',
+                'password': 'unsafe-password',
+                'profile': <String, Object?>{
+                  'access_token': 'unsafe-access',
+                  'refreshToken': 'unsafe-refresh',
+                  'displayName': 'Safe Name',
+                },
+              })!
+              as Map<String, Object?>;
       final profile = body['profile']! as Map<String, Object?>;
 
       expect(body['email'], 'person@example.com');
@@ -45,9 +47,9 @@ void main() {
     });
 
     test('parses and redacts JSON strings before logging', () {
-      final body = redactor.body(
-        '{"password":"unsafe","message":"safe"}',
-      )! as Map<String, Object?>;
+      final body =
+          redactor.body('{"password":"unsafe","message":"safe"}')!
+              as Map<String, Object?>;
 
       expect(body['password'], ApiLogRedactor.redacted);
       expect(body['message'], 'safe');
@@ -76,10 +78,7 @@ void main() {
     );
 
     expect(events, hasLength(1));
-    expect(
-      events.single.metadata['accessToken'],
-      ApiLogRedactor.redacted,
-    );
+    expect(events.single.metadata['accessToken'], ApiLogRedactor.redacted);
     expect(events.single.metadata['status'], 'authenticated');
   });
 }

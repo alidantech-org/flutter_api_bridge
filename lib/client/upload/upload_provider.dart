@@ -17,21 +17,24 @@ final _progressController = StreamController<UploadProgress>.broadcast();
 /// ```dart
 /// final progress = ref.watch(uploadProgressStreamProvider);
 /// ```
-final uploadProgressStreamProvider =
-    StreamProvider<UploadProgress>((_) => _progressController.stream);
+final uploadProgressStreamProvider = StreamProvider<UploadProgress>(
+  (_) => _progressController.stream,
+);
 
 // ─── Upload notifier ───────────────────────────────────────────────────────────
 
 /// State: the result of the last upload (or null if none yet).
 final uploadProvider =
     StateNotifierProvider<UploadNotifier, AsyncValue<ApiResult<dynamic>>>(
-        (ref) => UploadNotifier());
+      (ref) => UploadNotifier(),
+    );
 
 class UploadNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
   UploadNotifier() : super(const AsyncValue.loading()) {
     // Start idle
     state = const AsyncValue.data(
-        ApiError(message: '', error: '', statusCode: null));
+      ApiError(message: '', error: '', statusCode: null),
+    );
   }
 
   CancelToken? _cancelToken;
@@ -92,17 +95,21 @@ class UploadNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
       }
 
       final result = ApiSuccess<T>(
-          message: message,
-          statusCode: response.statusCode ?? 200,
-          data: parsed,
-          raw: raw);
+        message: message,
+        statusCode: response.statusCode ?? 200,
+        data: parsed,
+        raw: raw,
+      );
 
       state = AsyncValue.data(result);
       return result;
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
         final result = ApiError<T>(
-            message: 'Upload cancelled', error: 'cancelled', statusCode: null);
+          message: 'Upload cancelled',
+          error: 'cancelled',
+          statusCode: null,
+        );
         state = AsyncValue.data(result);
         return result;
       }
@@ -121,8 +128,10 @@ class UploadNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
       return result;
     } catch (e) {
       dev.log('[upload] Unexpected: $e', name: 'server', level: 1000);
-      final result =
-          ApiError<T>(message: 'Unexpected upload error', error: e.toString());
+      final result = ApiError<T>(
+        message: 'Unexpected upload error',
+        error: e.toString(),
+      );
       state = AsyncValue.data(result);
       return result;
     }

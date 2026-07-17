@@ -51,10 +51,7 @@ abstract interface class AuthCredentialStore {
 
 /// Hive-backed bearer credential store isolated by connection key.
 class HiveAuthCredentialStore implements AuthCredentialStore {
-  HiveAuthCredentialStore({
-    required this.connectionKey,
-    required this.config,
-  });
+  HiveAuthCredentialStore({required this.connectionKey, required this.config});
 
   static const String _boxName = 'flutter_api_bridge_auth';
 
@@ -93,8 +90,9 @@ class HiveAuthCredentialStore implements AuthCredentialStore {
 
     return StoredAuthCredentials(
       accessToken: access is String && access.trim().isNotEmpty ? access : null,
-      refreshToken:
-          refresh is String && refresh.trim().isNotEmpty ? refresh : null,
+      refreshToken: refresh is String && refresh.trim().isNotEmpty
+          ? refresh
+          : null,
       expiresAt: expiry,
     );
   }
@@ -122,11 +120,7 @@ class HiveAuthCredentialStore implements AuthCredentialStore {
     await box.deleteAll(<String>[_accessKey, _refreshKey, _expiryKey]);
   }
 
-  Future<void> _putOrDelete(
-    Box<dynamic> box,
-    String key,
-    String? value,
-  ) async {
+  Future<void> _putOrDelete(Box<dynamic> box, String key, String? value) async {
     final clean = value?.trim();
     if (clean == null || clean.isEmpty) {
       await box.delete(key);
@@ -138,9 +132,7 @@ class HiveAuthCredentialStore implements AuthCredentialStore {
 
 /// Lightweight in-memory store useful for tests and ephemeral connections.
 class MemoryAuthCredentialStore implements AuthCredentialStore {
-  MemoryAuthCredentialStore([
-    this.credentials = const StoredAuthCredentials(),
-  ]);
+  MemoryAuthCredentialStore([this.credentials = const StoredAuthCredentials()]);
 
   StoredAuthCredentials credentials;
 

@@ -35,12 +35,12 @@ class AuthSession {
   });
 
   const AuthSession.unknown()
-      : status = AuthSessionStatus.unknown,
-        hasAccessCredential = false,
-        hasRefreshCredential = false,
-        revision = 0,
-        expiresAt = null,
-        reason = null;
+    : status = AuthSessionStatus.unknown,
+      hasAccessCredential = false,
+      hasRefreshCredential = false,
+      revision = 0,
+      expiresAt = null,
+      reason = null;
 
   final AuthSessionStatus status;
   final bool hasAccessCredential;
@@ -99,13 +99,13 @@ class AuthSession {
 
   @override
   int get hashCode => Object.hash(
-        status,
-        hasAccessCredential,
-        hasRefreshCredential,
-        revision,
-        expiresAt,
-        reason,
-      );
+    status,
+    hasAccessCredential,
+    hasRefreshCredential,
+    revision,
+    expiresAt,
+    reason,
+  );
 
   @override
   String toString() {
