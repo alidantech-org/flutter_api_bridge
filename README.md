@@ -149,7 +149,7 @@ if (response.isValid) {
 }
 ```
 
-Configure refresh with a callback that extracts replacement credentials:
+Configure refresh with a callback that extracts replacement credentials. The stored refresh token is available only inside this trusted connection-level adapter; it is never exposed through `AuthSession` or application providers:
 
 ```dart
 final config = AuthConfig(
@@ -157,7 +157,7 @@ final config = AuthConfig(
   refresh: (context) async {
     final response = await context.request(
       path: '/v1/auth/refresh',
-      data: {'refreshToken': securelyReadRefreshToken()},
+      data: {'refreshToken': context.refreshToken},
     );
 
     final json = Map<String, dynamic>.from(response.data as Map);
@@ -230,17 +230,18 @@ Before any event reaches a sink, the bridge recursively redacts:
 - API keys;
 - passwords, passcodes, PINs, and secrets;
 - access, refresh, temporary, and identity tokens;
-- sensitive nested map and JSON-string fields.
+- sensitive nested map and JSON-string fields;
+- all URI query and fragment values.
 
 Multipart logs contain only field names, filenames, and byte lengths. Raw file contents are never logged.
 
-Every request log carries a connection-scoped request ID, method, URI, status, duration, retry count, and whether authentication was actually applied.
+Every request log carries a connection-scoped request ID, method, safe URI path, status, duration, retry count, and whether authentication was actually applied.
 
 ## Legacy API
 
 `Server`, `ApiClient`, `AuthStrategy`, and Riverpod's `apiProvider` remain available for compatibility. New generated packages should use `FlutterApiBridge`, `ApiConnection`, and `ApiAuth`.
 
-The legacy debug logger no longer prints request/response bodies or credential-bearing headers.
+The legacy debug logger no longer prints request/response bodies, query values, or credential-bearing headers.
 
 ## Validation
 
