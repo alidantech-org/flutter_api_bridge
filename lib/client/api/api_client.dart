@@ -149,7 +149,7 @@ class _LegacySafeLogInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     dev.log(
-      '${options.method} ${options.uri}',
+      '${options.method} ${_safeUri(options.uri)}',
       name: 'flutter_api_bridge.legacy',
       level: 800,
     );
@@ -162,7 +162,8 @@ class _LegacySafeLogInterceptor extends Interceptor {
     ResponseInterceptorHandler handler,
   ) {
     dev.log(
-      '${response.requestOptions.method} ${response.requestOptions.uri} '
+      '${response.requestOptions.method} '
+      '${_safeUri(response.requestOptions.uri)} '
       'status=${response.statusCode}',
       name: 'flutter_api_bridge.legacy',
       level: 800,
@@ -173,7 +174,8 @@ class _LegacySafeLogInterceptor extends Interceptor {
   @override
   void onError(DioException error, ErrorInterceptorHandler handler) {
     dev.log(
-      '${error.requestOptions.method} ${error.requestOptions.uri} '
+      '${error.requestOptions.method} '
+      '${_safeUri(error.requestOptions.uri)} '
       'status=${error.response?.statusCode} type=${error.type.name}',
       name: 'flutter_api_bridge.legacy',
       level: 900,
@@ -181,4 +183,6 @@ class _LegacySafeLogInterceptor extends Interceptor {
     );
     handler.next(error);
   }
+
+  Uri _safeUri(Uri uri) => uri.replace(query: '', fragment: '');
 }
