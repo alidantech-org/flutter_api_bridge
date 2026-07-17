@@ -54,6 +54,16 @@ void main() {
       expect(body['password'], ApiLogRedactor.redacted);
       expect(body['message'], 'safe');
     });
+
+    test('removes query and fragment values from URIs', () {
+      final uri = redactor.uri(
+        Uri.parse(
+          'https://api.example.com/reset?token=unsafe&email=user@example.com#secret',
+        ),
+      );
+
+      expect(uri.toString(), 'https://api.example.com/reset');
+    });
   });
 
   test('ApiLogger sends only redacted metadata to custom sinks', () {
