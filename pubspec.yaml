@@ -1,6 +1,6 @@
 name: flutter_api_bridge
-description: A lightweight and extensible HTTP client wrapper for Dart and Flutter with built-in cookie management, state management, and local caching.
-version: 0.1.0
+description: A typed Flutter HTTP runtime with named connections, explicit authentication lifecycle, safe structured logging, cookies, caching, and uploads.
+version: 0.2.0-alpha.1
 repository: https://github.com/alidantech-org/flutter_api_bridge
 issue_tracker: https://github.com/alidantech-org/flutter_api_bridge/issues
 
@@ -12,25 +12,16 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # HTTP client with timeout and interceptor support
   dio: ^5.7.0
-  # Automatic cookie jar management for HTTP requests
   dio_cookie_manager: ^3.1.1
-  # Cookie storage and persistence
   cookie_jar: ^4.0.8
-  # Local data persistence with Hive database
   hive_flutter: ^1.1.0
-  # State management and reactive programming
   flutter_riverpod: ^2.5.1
-  # Platform-specific file system access
   path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  # Code generation for Hive models and Riverpod providers
   build_runner: ^2.4.13
-  # Hive adapter generator for type safety
   hive_generator: ^2.0.1
-  # Dart linting rules and best practices
   lints: ^5.0.0
