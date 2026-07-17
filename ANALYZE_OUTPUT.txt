@@ -1,0 +1,9 @@
+Analyzing flutter_api_bridge...                                 
+
+warning • Unused import: 'api_request_options.dart'. Try removing the import directive • lib/client/api/api_connection.dart:15:8 • unused_import
+warning • The value of the field '_cookies' isn't used. Try removing the field, or using it • lib/client/api/api_connection.dart:37:31 • unused_field
+warning • This case is covered by the previous cases. Try removing the case clause, or restructuring the preceding patterns • lib/client/api/api_connection.dart:131:9 • unreachable_switch_case
+
+3 issues found. (ran in 8.3s)
+
+ANALYZE_EXIT_CODE=1
