@@ -1,16 +1,12 @@
-// lib/server/server.dart
-//
-// Single barrel export + initialisation entry point.
-// Call [Server.init] once in main() before runApp().
-
 import 'package:hive_flutter/hive_flutter.dart';
+
 import 'api/api_cache.dart';
 import 'api/api_client.dart';
+import 'auth/api_auth.dart';
 import 'auth/auth_strategy.dart';
 import 'cookies/cookie_manager.dart';
+import 'logging/api_logger.dart';
 import 'server_config.dart';
-
-// ── Public exports ───────────────────────────────────────────────────────────────
 
 export 'api/api_client.dart'
     show ApiClient, AuthEvents, UnauthorizedEvent, ForbiddenEvent;
@@ -20,64 +16,88 @@ export 'api/api_provider.dart';
 export 'api/api_request.dart';
 export 'api/api_request_options.dart';
 export 'api/api_result.dart';
+export 'auth/api_auth.dart';
 export 'auth/auth_strategy.dart';
 export 'cookies/cookie_events.dart';
 export 'cookies/cookie_manager.dart';
+export 'logging/api_logger.dart';
 export 'server_config.dart';
 export 'upload/upload_provider.dart';
 export 'upload/upload_progress.dart';
 
-// ── Initialisation ─────────────────────────────────────────────────────────────
-
+/// Legacy global bridge entry point.
+///
+/// New generated clients should use connection-scoped APIs, but this class
+/// remains supported while consumers migrate.
 class Server {
   Server._();
 
-  /// Initialise the entire server layer.
-  /// Call once in [main] before [runApp].
-  ///
-  /// ```dart
-  /// await Server.init(
-  ///   baseUrl: 'https://api.example.com',
-  ///   authStrategy: BearerStrategy(tokenKey: 'access_token'),
-  ///   defaultCacheTtl: Duration(minutes: 5),
-  /// );
-  /// ```
+  static ApiAuth? _auth;
+
+  /// Authoritative transport-auth state for the configured server.
+  static ApiAuth get auth {
+    final value = _auth;
+    if (value == null) {
+      throw StateError('Server is not initialized. Call Server.init() first.');
+    }
+    return value;
+  }
+
   static Future<void> init({
     required String baseUrl,
     required AuthStrategy authStrategy,
     String defaultVersion = '',
     Duration defaultCacheTtl = const Duration(minutes: 5),
     String? apiKey,
+    ApiLogger logger = const DeveloperApiLogger(),
+    ApiLoggingConfig logging = const ApiLoggingConfig(),
   }) async {
-    // 1. Hive
     await Hive.initFlutter();
 
-    // 2. Config
     ServerConfig.baseUrl = baseUrl;
     ServerConfig.defaultCacheTtl = defaultCacheTtl;
     ServerConfig.apiKey = apiKey;
 
-    // 3. Cache
     await ApiCache.init();
-
-    // 4. Cookies
     await CookieManager.init(baseUrl);
 
-    // 5. Dio clients
-    ApiClient.init(baseUrl: baseUrl, authStrategy: authStrategy);
+    final previousAuth = _auth;
+    if (previousAuth != null) await previousAuth.dispose();
+
+    final configuredAuth = ApiAuth(
+      strategy: authStrategy,
+      logger: logger,
+      logging: logging,
+    );
+    _auth = configuredAuth;
+
+    ApiClient.init(
+      baseUrl: baseUrl,
+      authStrategy: authStrategy,
+      auth: configuredAuth,
+      logger: logger,
+      logging: logging,
+    );
+
+    await configuredAuth.initialize();
   }
 
-  /// Clear all cached API responses — call on logout.
   static Future<void> clearCache() => ApiCache.clearAll();
 
-  /// Clear auth token and Dio instances — call on logout.
-  static Future<void> clearAuth({required String tokenKey}) async {
-    await BearerStrategy.clearToken(key: tokenKey);
+  /// Clears bridge-managed transport authentication.
+  static Future<void> clearAuth({String? tokenKey}) async {
+    final configuredAuth = _auth;
+    if (configuredAuth != null) {
+      await configuredAuth.clear();
+    } else if (tokenKey != null) {
+      // Compatibility for callers clearing before initialization.
+      await BearerStrategy.clearToken(key: tokenKey);
+    }
     ApiClient.reset();
   }
 
-  /// Full reset — cache + auth + cookies. Call on logout.
-  static Future<void> logout({required String tokenKey}) async {
+  /// Clears cache, credentials, and cookies.
+  static Future<void> logout({String? tokenKey}) async {
     await clearCache();
     await clearAuth(tokenKey: tokenKey);
     await CookieManager.clearAll();
