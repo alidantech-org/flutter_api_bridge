@@ -1,106 +1,143 @@
-// lib/server/auth/auth_strategy.dart
 import 'package:dio/dio.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
-// ─── Abstract strategy ─────────────────────────────────────────────────────────
-
-/// Base auth strategy. Implement to add custom auth behaviour.
-/// The [ApiClient] calls [apply] before every non-noAuth request.
+/// Base transport-auth strategy.
+///
+/// Application-specific login and refresh endpoints do not belong here. A
+/// generated client performs those calls, then [ApiAuth] asks the strategy to
+/// persist or clear the resulting transport credential.
 abstract class AuthStrategy {
   const AuthStrategy();
 
-  /// Attach auth credentials to [options] before the request is sent.
+  /// Attach credentials before a protected request is sent.
   Future<void> apply(RequestOptions options);
 
-  /// Called when the API layer receives a 401.
-  /// Use to trigger token refresh or logout in your app provider.
+  /// Whether persisted transport credentials are currently available.
+  Future<bool> hasCredentials() async => false;
+
+  /// Persist a credential after application authentication succeeds.
+  /// Cookie strategies may ignore [credential] because Dio persists cookies.
+  Future<void> saveCredentials(String? credential) async {}
+
+  /// Remove locally persisted transport credentials.
+  Future<void> clearCredentials() async {}
+
+  /// Called once when the bridge transitions to an expired session.
   Future<void> onUnauthorized() async {}
 }
 
-// ─── Bearer token strategy ─────────────────────────────────────────────────────
-
-/// Reads the JWT access token from memory (fast) with a Hive fallback
-/// (persistent). Attaches it as `Authorization: Bearer <token>`.
-///
-/// The app creator saves the token after login:
-/// ```dart
-/// await BearerStrategy.saveToken(token);
-/// ```
+/// Persistent bearer-token authentication.
 class BearerStrategy extends AuthStrategy {
   BearerStrategy({required this.tokenKey});
 
-  /// Hive box key used to persist the token.
-  /// Must match the key used when saving after login.
-  /// e.g. `'access_token'`
   final String tokenKey;
 
-  // L1 — in-memory cache so Hive is not hit on every request
-  static String? _memoryToken;
+  static final Map<String, String> _memoryTokens = <String, String>{};
 
-  /// Persist and cache the token. Call this after a successful login.
   static Future<void> saveToken(String token, {required String key}) async {
-    _memoryToken = token;
+    final clean = token.trim();
+    if (clean.isEmpty) {
+      throw ArgumentError.value(token, 'token', 'Bearer token cannot be empty.');
+    }
+    _memoryTokens[key] = clean;
     final box = await Hive.openBox<String>('server_auth');
-    await box.put(key, token);
+    await box.put(key, clean);
   }
 
-  /// Clear the token from memory and Hive. Call this on logout.
   static Future<void> clearToken({required String key}) async {
-    _memoryToken = null;
+    _memoryTokens.remove(key);
     final box = await Hive.openBox<String>('server_auth');
     await box.delete(key);
   }
 
-  /// Read the current token — memory first, then Hive.
-  Future<String?> _getToken() async {
-    if (_memoryToken != null) return _memoryToken;
+  Future<String?> getToken() async {
+    final memory = _memoryTokens[tokenKey];
+    if (memory != null && memory.isNotEmpty) return memory;
+
     final box = await Hive.openBox<String>('server_auth');
-    final stored = box.get(tokenKey);
-    if (stored != null) _memoryToken = stored; // warm the memory cache
-    return stored;
+    final stored = box.get(tokenKey)?.trim();
+    if (stored != null && stored.isNotEmpty) {
+      _memoryTokens[tokenKey] = stored;
+      return stored;
+    }
+    return null;
   }
 
   @override
   Future<void> apply(RequestOptions options) async {
-    final token = await _getToken();
+    final token = await getToken();
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
     }
   }
+
+  @override
+  Future<bool> hasCredentials() async => (await getToken()) != null;
+
+  @override
+  Future<void> saveCredentials(String? credential) async {
+    final value = credential?.trim();
+    if (value == null || value.isEmpty) {
+      throw ArgumentError('Bearer authentication requires a credential.');
+    }
+    await saveToken(value, key: tokenKey);
+  }
+
+  @override
+  Future<void> clearCredentials() => clearToken(key: tokenKey);
 }
 
-// ─── Cookie strategy ───────────────────────────────────────────────────────────
-
-/// Relies on Dio's CookieJar to attach cookies automatically.
-/// No manual header injection needed — the CookieJar intercepts every request.
-///
-/// Use this when your backend sets HttpOnly cookies on login.
+/// Cookie authentication managed by Dio's persistent cookie jar.
 class CookieStrategy extends AuthStrategy {
-  const CookieStrategy();
+  const CookieStrategy({this.sessionCookieNames = const <String>[]});
+
+  /// Cookie names that indicate a restorable authenticated session.
+  /// Leave empty when the server uses an opaque cookie setup and call
+  /// `auth.completeAuthentication()` explicitly after login.
+  final List<String> sessionCookieNames;
 
   @override
   Future<void> apply(RequestOptions options) async {
-    // CookieJar handles everything — nothing to do here.
+    // CookieManager's interceptor attaches cookies.
+  }
+
+  @override
+  Future<bool> hasCredentials() async {
+    if (sessionCookieNames.isEmpty) return false;
+    final box = await Hive.openBox<String>('server_auth_cookie_state');
+    return sessionCookieNames.any((name) => box.get(name) == 'present');
+  }
+
+  @override
+  Future<void> saveCredentials(String? credential) async {
+    if (sessionCookieNames.isEmpty) return;
+    final box = await Hive.openBox<String>('server_auth_cookie_state');
+    for (final name in sessionCookieNames) {
+      await box.put(name, 'present');
+    }
+  }
+
+  @override
+  Future<void> clearCredentials() async {
+    if (sessionCookieNames.isEmpty) return;
+    final box = await Hive.openBox<String>('server_auth_cookie_state');
+    for (final name in sessionCookieNames) {
+      await box.delete(name);
+    }
   }
 }
 
-// ─── API key strategy (future) ────────────────────────────────────────────────
-
-/// Attaches a static API key to every request as an `x-api-key` header.
-/// The key is a compile-time constant — never stored dynamically.
-///
-/// Individual requests opt out via `noAuth: true`.
-///
-/// @Deprecated — not yet implemented on the backend.
-/// Uncomment and configure once backend API key support is ready.
+/// Static API-key authentication.
 class ApiKeyStrategy extends AuthStrategy {
   const ApiKeyStrategy({required this.apiKey});
 
-  /// The API key constant. Pass from your app-level config.
   final String apiKey;
 
   @override
   Future<void> apply(RequestOptions options) async {
     options.headers['x-api-key'] = apiKey;
   }
+
+  @override
+  Future<bool> hasCredentials() async => apiKey.trim().isNotEmpty;
 }
