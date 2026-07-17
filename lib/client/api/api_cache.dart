@@ -35,10 +35,10 @@ class _HiveEntry {
   bool get isExpired => DateTime.now().millisecondsSinceEpoch > expiresAtMs;
 
   Map<String, dynamic> toMap() => {
-    'originalKey': originalKey,
-    'data': ApiCache._normalizeForHive(data),
-    'expiresAtMs': expiresAtMs,
-  };
+        'originalKey': originalKey,
+        'data': ApiCache._normalizeForHive(data),
+        'expiresAtMs': expiresAtMs,
+      };
 
   static _HiveEntry? fromMap(dynamic value) {
     if (value is! Map) return null;

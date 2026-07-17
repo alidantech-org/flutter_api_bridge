@@ -26,8 +26,8 @@ final uploadProgressStreamProvider = StreamProvider<UploadProgress>(
 /// State: the result of the last upload (or null if none yet).
 final uploadProvider =
     StateNotifierProvider<UploadNotifier, AsyncValue<ApiResult<dynamic>>>(
-      (ref) => UploadNotifier(),
-    );
+  (ref) => UploadNotifier(),
+);
 
 class UploadNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
   UploadNotifier() : super(const AsyncValue.loading()) {

@@ -4,9 +4,13 @@
 class UploadProgress {
   const UploadProgress({required this.sent, required this.total});
 
-  const UploadProgress.idle() : sent = 0, total = 0;
+  const UploadProgress.idle()
+      : sent = 0,
+        total = 0;
 
-  const UploadProgress.done(int bytes) : sent = bytes, total = bytes;
+  const UploadProgress.done(int bytes)
+      : sent = bytes,
+        total = bytes;
 
   final int sent;
   final int total;

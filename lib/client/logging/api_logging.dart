@@ -132,7 +132,7 @@ class ApiLogEvent {
 /// Emits redacted log records for one named API connection.
 class ApiLogger {
   ApiLogger({required this.connectionKey, required this.config})
-    : redactor = ApiLogRedactor(config);
+      : redactor = ApiLogRedactor(config);
 
   final String connectionKey;
   final ApiLoggingConfig config;
@@ -201,8 +201,8 @@ class ApiLogger {
 /// logging sink.
 class ApiLogRedactor {
   ApiLogRedactor(this.config)
-    : _headers = config.redactedHeaders.map(_normalizeKey).toSet(),
-      _fields = config.redactedFields.map(_normalizeKey).toSet();
+      : _headers = config.redactedHeaders.map(_normalizeKey).toSet(),
+        _fields = config.redactedFields.map(_normalizeKey).toSet();
 
   static const String redacted = '<redacted>';
 

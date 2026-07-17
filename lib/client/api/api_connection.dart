@@ -25,10 +25,10 @@ class ApiConnection {
     required ConnectionCookieStore cookies,
     required ApiLogger logger,
     required this.auth,
-  }) : _client = client,
-       _refreshClient = refreshClient,
-       _cookies = cookies,
-       _logger = logger;
+  })  : _client = client,
+        _refreshClient = refreshClient,
+        _cookies = cookies,
+        _logger = logger;
 
   final String key;
   final ApiBridgeConfig config;
@@ -129,9 +129,9 @@ class ApiConnection {
       DeleteRequest<T> value => _mutate(value, 'DELETE', value.body),
       UploadRequest<T> value => _upload(value),
       _ => ApiError<T>(
-        message: 'Unsupported request type',
-        error: 'Unsupported request type: ${request.runtimeType}',
-      ),
+          message: 'Unsupported request type',
+          error: 'Unsupported request type: ${request.runtimeType}',
+        ),
     };
   }
 
@@ -515,11 +515,9 @@ class _ConnectionAuthInterceptor extends Interceptor {
     try {
       final requestRevision =
           options.extra['bridge.authRevision'] as int? ?? -1;
-      final credentialsAlreadyChanged =
-          auth.current.isAuthenticated &&
+      final credentialsAlreadyChanged = auth.current.isAuthenticated &&
           auth.current.revision != requestRevision;
-      final refreshed =
-          credentialsAlreadyChanged ||
+      final refreshed = credentialsAlreadyChanged ||
           await auth.refresh(reason: 'http_$status');
 
       if (!refreshed) {

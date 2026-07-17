@@ -15,8 +15,8 @@ import 'api_result.dart';
 
 final apiProvider =
     StateNotifierProvider<ApiNotifier, AsyncValue<ApiResult<dynamic>>>(
-      (ref) => ApiNotifier(),
-    );
+  (ref) => ApiNotifier(),
+);
 
 // ─── Notifier ──────────────────────────────────────────────────────────────────
 

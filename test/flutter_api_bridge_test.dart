@@ -283,19 +283,25 @@ void main() {
           jsonPlaceholderTodo,
           const Duration(minutes: 5),
         );
-        await ApiCache.write('/users/1', {
-          'id': 1,
-          'name': 'Leanne Graham',
-        }, const Duration(minutes: 5));
+        await ApiCache.write(
+            '/users/1',
+            {
+              'id': 1,
+              'name': 'Leanne Graham',
+            },
+            const Duration(minutes: 5));
 
         await ApiCache.invalidateWhere('/todos');
 
         expect(ApiCache.read('/todos/1'), isNull);
         expect(ApiCache.read('/users/1'), {'id': 1, 'name': 'Leanne Graham'});
 
-        await ApiCache.write('/expired', {
-          'stale': true,
-        }, const Duration(milliseconds: -1));
+        await ApiCache.write(
+            '/expired',
+            {
+              'stale': true,
+            },
+            const Duration(milliseconds: -1));
 
         expect(ApiCache.read('/expired'), isNull);
       },

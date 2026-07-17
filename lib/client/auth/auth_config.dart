@@ -20,14 +20,14 @@ class AuthRefreshResult {
     this.accessToken,
     this.refreshToken,
     this.expiresAt,
-  }) : success = true,
-       reason = null;
+  })  : success = true,
+        reason = null;
 
   const AuthRefreshResult.failure({this.reason})
-    : success = false,
-      accessToken = null,
-      refreshToken = null,
-      expiresAt = null;
+      : success = false,
+        accessToken = null,
+        refreshToken = null,
+        expiresAt = null;
 
   final bool success;
   final String? accessToken;
@@ -76,8 +76,8 @@ class AuthRefreshContext {
   }
 }
 
-typedef AuthRefreshCallback =
-    Future<AuthRefreshResult> Function(AuthRefreshContext context);
+typedef AuthRefreshCallback = Future<AuthRefreshResult> Function(
+    AuthRefreshContext context);
 
 /// Authentication behavior for one connection.
 ///

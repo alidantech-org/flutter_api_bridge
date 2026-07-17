@@ -22,10 +22,10 @@ class ApiAuth {
     required Dio refreshClient,
     ConnectionCookieStore? cookies,
     AuthCredentialStore? credentialStore,
-  }) : _logger = logger,
-       _refreshClient = refreshClient,
-       _cookies = cookies,
-       _credentialStore = credentialStore;
+  })  : _logger = logger,
+        _refreshClient = refreshClient,
+        _cookies = cookies,
+        _credentialStore = credentialStore;
 
   final String connectionKey;
   final AuthConfig config;
@@ -110,9 +110,9 @@ class ApiAuth {
 
         final values =
             await Future.wait<AuthCookieSnapshot>(<Future<AuthCookieSnapshot>>[
-              cookies.snapshot(config.accessCookieName),
-              cookies.snapshot(config.refreshCookieName),
-            ]);
+          cookies.snapshot(config.accessCookieName),
+          cookies.snapshot(config.refreshCookieName),
+        ]);
         final access = values[0];
         final refresh = values[1];
         final hasAccess = access.isUsable(now, config.expirySkew);
@@ -123,8 +123,8 @@ class ApiAuth {
             status: hasAccess
                 ? AuthSessionStatus.authenticated
                 : hasRefresh
-                ? AuthSessionStatus.expired
-                : AuthSessionStatus.unauthenticated,
+                    ? AuthSessionStatus.expired
+                    : AuthSessionStatus.unauthenticated,
             hasAccessCredential: hasAccess,
             hasRefreshCredential: hasRefresh,
             revision: _current.revision,
@@ -152,8 +152,8 @@ class ApiAuth {
             status: hasAccess
                 ? AuthSessionStatus.authenticated
                 : hasRefresh
-                ? AuthSessionStatus.expired
-                : AuthSessionStatus.unauthenticated,
+                    ? AuthSessionStatus.expired
+                    : AuthSessionStatus.unauthenticated,
             hasAccessCredential: hasAccess,
             hasRefreshCredential: hasRefresh,
             revision: _current.revision,
@@ -196,9 +196,8 @@ class ApiAuth {
 
     final credentials = StoredAuthCredentials(
       accessToken: cleanAccess,
-      refreshToken: refreshToken?.trim().isEmpty == true
-          ? null
-          : refreshToken?.trim(),
+      refreshToken:
+          refreshToken?.trim().isEmpty == true ? null : refreshToken?.trim(),
       expiresAt: expiresAt?.toUtc(),
     );
 
@@ -234,9 +233,8 @@ class ApiAuth {
 
       final token = _credentials.accessToken!;
       final scheme = config.authorizationScheme.trim();
-      options.headers[config.authorizationHeader] = scheme.isEmpty
-          ? token
-          : '$scheme $token';
+      options.headers[config.authorizationHeader] =
+          scheme.isEmpty ? token : '$scheme $token';
       options.extra['bridge.authApplied'] = true;
       return true;
     }

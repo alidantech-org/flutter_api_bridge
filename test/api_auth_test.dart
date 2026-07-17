@@ -53,8 +53,8 @@ void main() {
           accessToken: 'expired-access-token',
           refreshToken: 'refresh-token',
           expiresAt: DateTime.now().toUtc().subtract(
-            const Duration(minutes: 1),
-          ),
+                const Duration(minutes: 1),
+              ),
         ),
       );
       final completer = Completer<AuthRefreshResult>();

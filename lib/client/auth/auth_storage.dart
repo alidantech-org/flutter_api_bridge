@@ -90,9 +90,8 @@ class HiveAuthCredentialStore implements AuthCredentialStore {
 
     return StoredAuthCredentials(
       accessToken: access is String && access.trim().isNotEmpty ? access : null,
-      refreshToken: refresh is String && refresh.trim().isNotEmpty
-          ? refresh
-          : null,
+      refreshToken:
+          refresh is String && refresh.trim().isNotEmpty ? refresh : null,
       expiresAt: expiry,
     );
   }

@@ -19,24 +19,25 @@ sealed class ApiResult<T> {
 
   /// Convenience: get data or null.
   T? get dataOrNull => switch (this) {
-    ApiSuccess<T> s => s.data,
-    ApiError<T> _ => null,
-  };
+        ApiSuccess<T> s => s.data,
+        ApiError<T> _ => null,
+      };
 
   /// Convenience: get message regardless of outcome.
   String get message => switch (this) {
-    ApiSuccess<T> s => s.message,
-    ApiError<T> e => e.message,
-  };
+        ApiSuccess<T> s => s.message,
+        ApiError<T> e => e.message,
+      };
 
   /// Pattern-match helper — mirrors Riverpod's AsyncValue.when()
   R when<R>({
     required R Function(T? data, String message, int statusCode) success,
     required R Function(String error, String message, int? statusCode) error,
-  }) => switch (this) {
-    ApiSuccess<T> s => success(s.data, s.message, s.statusCode),
-    ApiError<T> e => error(e.error, e.message, e.statusCode),
-  };
+  }) =>
+      switch (this) {
+        ApiSuccess<T> s => success(s.data, s.message, s.statusCode),
+        ApiError<T> e => error(e.error, e.message, e.statusCode),
+      };
 
   /// Pattern-match helper — only handle success, ignore error.
   void ifSuccess(void Function(T? data, String message) callback) {

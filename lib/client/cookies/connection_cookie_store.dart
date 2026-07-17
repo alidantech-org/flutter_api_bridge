@@ -108,8 +108,7 @@ class ConnectionCookieStore {
     options.headers.remove(HttpHeaders.cookieHeader);
     if (cookies.isEmpty) return;
 
-    options.headers[HttpHeaders.cookieHeader] = cookies
-        .map((cookie) => '${cookie.name}=${cookie.value}')
-        .join('; ');
+    options.headers[HttpHeaders.cookieHeader] =
+        cookies.map((cookie) => '${cookie.name}=${cookie.value}').join('; ');
   }
 }
