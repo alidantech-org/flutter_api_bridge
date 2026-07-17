@@ -161,7 +161,7 @@ class ApiLogger {
       message: message,
       requestId: requestId,
       method: method,
-      uri: uri,
+      uri: redactor.uri(uri),
       statusCode: statusCode,
       duration: duration,
       metadata: redactor.metadata(metadata),
@@ -227,13 +227,20 @@ class ApiLogRedactor {
     return source.map((key, value) => MapEntry(key, _redactField(key, value)));
   }
 
+  /// Query and fragment values are omitted entirely because they frequently
+  /// carry reset tokens, invitation secrets, email addresses, and search data.
+  Uri? uri(Uri? source) {
+    if (source == null) return null;
+    return source.replace(query: '', fragment: '');
+  }
+
   Object? body(Object? source) => value(source);
 
   Object? value(Object? source, {String? fieldName}) {
     if (fieldName != null && _isSensitiveField(fieldName)) return redacted;
     if (source == null || source is num || source is bool) return source;
     if (source is DateTime) return source.toUtc().toIso8601String();
-    if (source is Uri) return source.toString();
+    if (source is Uri) return uri(source).toString();
     if (source is Enum) return source.name;
     if (source is MultipartFile) return '<multipart-file>';
 
