@@ -36,19 +36,22 @@ class AuthRefreshResult {
   final String? reason;
 }
 
-/// Context passed to a custom authentication refresh callback.
+/// Context passed only to the trusted connection-level refresh adapter.
 ///
-/// The supplied Dio instance shares the connection's cookie jar and logging,
-/// but deliberately has no unauthorized retry interceptor. A failed refresh
-/// therefore cannot recurse forever.
+/// The refresh credential is deliberately available here rather than through
+/// [AuthSession], widgets, providers, or generated response models. The supplied
+/// Dio instance shares the connection's cookie jar and safe logging, but has no
+/// unauthorized retry interceptor, so refresh cannot recurse forever.
 class AuthRefreshContext {
   const AuthRefreshContext({
     required Dio client,
     required this.session,
+    this.refreshToken,
   }) : _client = client;
 
   final Dio _client;
   final AuthSession session;
+  final String? refreshToken;
 
   Future<Response<dynamic>> request({
     required String path,
@@ -136,6 +139,7 @@ class AuthConfig {
   bool get isEnabled => transport != AuthTransport.none;
 
   bool get canRefreshAutomatically {
-    return refresh != null || (refreshPath != null && refreshPath!.trim().isNotEmpty);
+    return refresh != null ||
+        (refreshPath != null && refreshPath!.trim().isNotEmpty);
   }
 }
