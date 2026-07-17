@@ -108,10 +108,12 @@ class ApiAuth {
           throw StateError('Cookie auth requires a connection cookie store.');
         }
 
-        final values = await Future.wait<AuthCookieSnapshot>(<Future<AuthCookieSnapshot>>[
-          cookies.snapshot(config.accessCookieName),
-          cookies.snapshot(config.refreshCookieName),
-        ]);
+        final values = await Future.wait<AuthCookieSnapshot>(
+          <Future<AuthCookieSnapshot>>[
+            cookies.snapshot(config.accessCookieName),
+            cookies.snapshot(config.refreshCookieName),
+          ],
+        );
         final access = values[0];
         final refresh = values[1];
         final hasAccess = access.isUsable(now, config.expirySkew);
@@ -184,7 +186,11 @@ class ApiAuth {
 
     final cleanAccess = accessToken.trim();
     if (cleanAccess.isEmpty) {
-      throw ArgumentError.value(accessToken, 'accessToken', 'must not be empty');
+      throw ArgumentError.value(
+        accessToken,
+        'accessToken',
+        'must not be empty',
+      );
     }
 
     final credentials = StoredAuthCredentials(
@@ -274,7 +280,11 @@ class ApiAuth {
       final callback = config.refresh;
       if (callback != null) {
         final result = await callback(
-          AuthRefreshContext(client: _refreshClient, session: current),
+          AuthRefreshContext(
+            client: _refreshClient,
+            session: current,
+            refreshToken: _credentials.refreshToken,
+          ),
         );
         if (!result.success) {
           return _handleRefreshFailure(result.reason ?? 'refresh_failed');
@@ -286,11 +296,12 @@ class ApiAuth {
             return _handleRefreshFailure('refresh_returned_no_access_token');
           }
 
-          final credentials = _credentials.merge(
+          final replacementRefresh = result.refreshToken?.trim();
+          final credentials = StoredAuthCredentials(
             accessToken: access,
-            refreshToken: result.refreshToken?.trim().isEmpty == true
-                ? null
-                : result.refreshToken?.trim(),
+            refreshToken: replacementRefresh?.isNotEmpty == true
+                ? replacementRefresh
+                : _credentials.refreshToken,
             expiresAt: result.expiresAt?.toUtc(),
           );
           await _credentialStore!.write(credentials);
@@ -439,6 +450,8 @@ class ApiAuth {
     required String logMessage,
     ApiLogLevel level = ApiLogLevel.debug,
   }) {
+    if (_hasSameCredentialState(_current, next)) return;
+
     final revised = next.copyWith(revision: _current.revision + 1);
     _current = revised;
     if (!_disposed) _changesController.add(revised);
@@ -456,6 +469,13 @@ class ApiAuth {
         'revision': revised.revision,
       },
     );
+  }
+
+  bool _hasSameCredentialState(AuthSession current, AuthSession next) {
+    return current.status == next.status &&
+        current.hasAccessCredential == next.hasAccessCredential &&
+        current.hasRefreshCredential == next.hasRefreshCredential &&
+        current.expiresAt == next.expiresAt;
   }
 
   void _ensureNotDisposed() {
