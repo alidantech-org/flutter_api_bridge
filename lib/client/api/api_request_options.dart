@@ -51,12 +51,12 @@ class ApiGetRequestOptions extends ApiRequestOptions {
   });
 
   const ApiGetRequestOptions.unauthenticated({
-    super.headers,
+    Map<String, String>? headers,
     this.cache = true,
     this.cacheTtl,
     this.forceRefresh = false,
     this.invalidateCache = false,
-  }) : super.unauthenticated();
+  }) : super.unauthenticated(headers: headers);
 
   final bool cache;
   final Duration? cacheTtl;
