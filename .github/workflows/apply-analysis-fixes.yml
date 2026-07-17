@@ -1,0 +1,70 @@
+name: Apply analyzer cleanup
+
+on:
+  push:
+    branches:
+      - chatgpt/auth-logging
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/auth-logging
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Apply analyzer fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('lib/client/api/api_connection.dart')
+          text = path.read_text()
+
+          replacements = {
+              "import 'api_request_options.dart';\n": "",
+              "    required ConnectionCookieStore cookies,\n": "",
+              "        _cookies = cookies,\n": "",
+              "  final ConnectionCookieStore _cookies;\n": "",
+              "      cookies: cookies,\n": "",
+              "      _ => ApiError<T>(\n          message: 'Unsupported request type',\n          error: 'Unsupported request type: ${request.runtimeType}',\n        ),\n": "",
+          }
+
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Expected source fragment not found:\n{old}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+
+      - name: Format and analyze
+        run: |
+          dart format .
+          flutter analyze --no-pub
+
+      - name: Run tests
+        run: flutter test --no-pub
+
+      - name: Remove helper and commit fixes
+        shell: bash
+        run: |
+          rm .github/workflows/apply-analysis-fixes.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: resolve auth runtime analyzer issues"
+          git push origin HEAD:chatgpt/auth-logging
