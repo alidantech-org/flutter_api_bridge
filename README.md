@@ -1,192 +1,253 @@
 # flutter_api_bridge
 
-A lightweight Flutter API layer built on Dio, Riverpod, Hive, and persistent cookies.
+A typed Flutter HTTP runtime for generated API packages and application code. It provides isolated named connections, explicit authentication lifecycle, persistent cookies or bearer credentials, single-flight refresh, safe structured logging, caching, uploads, and typed `ApiResult<T>` values.
 
-`flutter_api_bridge` gives Flutter apps a small set of reusable pieces for HTTP requests, authentication headers, cookie persistence, cached GET responses, upload progress, and typed success/error results.
+## Core rule: login is not authentication state
 
-## Features
+`flutter_api_bridge` never decides that a connection is authenticated because an endpoint returned HTTP 200 or because a response class is named `LoginResponse`.
 
-- Dio client setup with shared auth and cookie interceptors
-- Bearer token, cookie, and API key auth strategies
-- Riverpod notifiers for API calls and uploads
-- Memory + Hive cache for GET responses
-- Upload progress stream with cancel support
-- Cookie helpers and cookie change events
-- Auth event streams for 401 and 403 responses
+Authentication is established only when credentials actually exist:
 
-## Installation
+- **Cookie transport:** Dio persists the configured access cookie from `Set-Cookie`, then the bridge synchronizes the cookie jar.
+- **Bearer transport:** application or SDK adapter code validates the response and explicitly calls `ApiAuth.establish`.
 
-Add the package to your `pubspec.yaml`:
+A successful login response without usable credentials leaves the connection unauthenticated.
+
+## Add the package
 
 ```yaml
 dependencies:
-  flutter_api_bridge: ^0.1.0
+  flutter_api_bridge: ^0.2.0-alpha.1
 ```
 
-Then run:
+## Configure a named connection
 
-```bash
-flutter pub get
-```
-
-## Initialize
-
-Call `Server.init` before `runApp`.
+Generated API packages should own a stable connection key and configure it before `runApp`.
 
 ```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_api_bridge/flutter_api_bridge.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+await FlutterApiBridge.configure(
+  key: 'riderescue_api',
+  config: ApiBridgeConfig(
+    baseUri: Uri.parse('https://api.example.com'),
+    auth: const AuthConfig(
+      transport: AuthTransport.cookies,
+      accessCookieName: 'access_token',
+      refreshCookieName: 'refresh_token',
+      refreshPath: '/v1/auth/refresh',
+    ),
+  ),
+);
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+final connection = FlutterApiBridge.requireConnection('riderescue_api');
+```
 
-  await Server.init(
-    baseUrl: 'https://api.example.com',
-    authStrategy: BearerStrategy(tokenKey: 'access_token'),
-    defaultCacheTtl: const Duration(minutes: 5),
-  );
+Generated wrappers can expose the same connection without depending on Riverpod, widget refs, or application providers:
 
-  runApp(const ProviderScope(child: MyApp()));
+```dart
+class ExampleApi {
+  ExampleApi._(ApiConnection connection) : v1 = V1Client(connection);
+
+  static const connectionKey = 'example_api';
+
+  static Future<void> configure(ApiBridgeConfig config) {
+    return FlutterApiBridge.configure(
+      key: connectionKey,
+      config: config,
+    );
+  }
+
+  static ApiConnection get connection {
+    return FlutterApiBridge.requireConnection(connectionKey);
+  }
+
+  static ApiAuth get auth => connection.auth;
+
+  final V1Client v1;
 }
 ```
 
-For cookie-based APIs, use `const CookieStrategy()` instead of `BearerStrategy`.
-
-## Send Requests
-
-Use `apiProvider` when you want Riverpod-managed request state.
+## Execute typed requests
 
 ```dart
-final result = await ref.read(apiProvider.notifier).send(
-  GetRequest<Map<String, dynamic>>(
-    endpoint: '/todos/1',
-    options: const ApiGetRequestOptions(
-      cache: true,
-      noAuth: true,
+final result = await connection.execute(
+  GetRequest<UserResponse>(
+    endpoint: '/v1/users/me',
+    fromJson: (json) => UserResponse.fromJson(
+      Map<String, dynamic>.from(json as Map),
     ),
-    fromJson: (json) => Map<String, dynamic>.from(json as Map),
   ),
 );
 
 result.when(
   success: (data, message, statusCode) {
-    // Use parsed data.
+    // Use typed data.
   },
   error: (error, message, statusCode) {
-    // Show or log the failure.
+    // Present a safe application error.
   },
 );
 ```
 
-Mutations use the same notifier:
+## Public authentication endpoints
+
+Login, signup, Google sign-in, verification, password reset, health checks, and other public operations must be generated with unauthenticated request options:
 
 ```dart
-final result = await ref.read(apiProvider.notifier).send(
-  PostRequest<Map<String, dynamic>>(
-    endpoint: '/posts',
-    body: {'title': 'Hello'},
-    options: const ApiRequestOptions(noAuth: true),
-    fromJson: (json) => Map<String, dynamic>.from(json as Map),
-  ),
+PostRequest<AuthResponse>(
+  endpoint: '/v1/auth/login',
+  options: const ApiRequestOptions.unauthenticated(),
+  body: body.toJson(),
+  fromJson: AuthResponse.fromJson,
 );
 ```
 
-## Direct Dio Access
+This prevents a failed login from refreshing or reusing an older session. The bridge only retries a 401 when:
 
-If you only need the configured Dio instance, use `ApiClient.instance`.
+1. authentication was enabled for the request;
+2. a usable access credential was actually applied;
+3. the request allows retry;
+4. the request has not already been retried; and
+5. refresh is configured and a refresh credential exists.
 
-```dart
-final response = await ApiClient.instance('').get('/todos/1');
-```
+## Cookie authentication
 
-Pass a version prefix when you want separate clients:
-
-```dart
-final response = await ApiClient.instance('/v1').get('/users');
-```
-
-## Cache
-
-GET requests cache by default. Configure cache behavior with `ApiGetRequestOptions`.
+Cookie auth is the default transport. It is suitable for HttpOnly access and refresh cookies.
 
 ```dart
-await ref.read(apiProvider.notifier).send(
-  GetRequest<Map<String, dynamic>>(
-    endpoint: '/users',
-    options: const ApiGetRequestOptions(
-      cacheTtl: Duration(minutes: 10),
-      forceRefresh: true,
-    ),
-    fromJson: (json) => Map<String, dynamic>.from(json as Map),
-  ),
-);
-
-await ApiCache.invalidateWhere('/users');
-```
-
-## Uploads
-
-```dart
-final result = await ref.read(uploadProvider.notifier).upload(
-  UploadRequest<Map<String, dynamic>>(
-    endpoint: '/upload',
-    files: [UploadFile.fromPath(field: 'photo', path: filePath)],
-    fields: {'album': 'profile'},
-    fromJson: (json) => Map<String, dynamic>.from(json as Map),
-  ),
+const authConfig = AuthConfig(
+  transport: AuthTransport.cookies,
+  accessCookieName: 'access_token',
+  refreshCookieName: 'refresh_token',
+  refreshPath: '/v1/auth/refresh',
 );
 ```
 
-Watch upload progress from the widget tree:
+After a login request completes, read the bridge-owned state:
 
 ```dart
-final progress = ref.watch(uploadProgressStreamProvider);
+final session = connection.auth.current;
+if (!session.isAuthenticated) {
+  // Login returned no usable access cookie.
+}
 ```
 
-Cancel an in-progress upload:
+Do not parse, copy, expose, or store HttpOnly cookie values in application state.
+
+## Bearer authentication
+
+Bearer responses are application-specific, so the bridge does not guess token fields. Validate and commit credentials explicitly:
 
 ```dart
-ref.read(uploadProvider.notifier).cancel();
+final response = await login();
+
+if (response.isValid) {
+  await connection.auth.establish(
+    accessToken: response.accessToken,
+    refreshToken: response.refreshToken,
+    expiresAt: response.expiresAt,
+  );
+}
 ```
 
-## Auth And Cookies
-
-Save and clear bearer tokens:
+Configure refresh with a callback that extracts replacement credentials:
 
 ```dart
-await BearerStrategy.saveToken(token, key: 'access_token');
-await BearerStrategy.clearToken(key: 'access_token');
+final config = AuthConfig(
+  transport: AuthTransport.bearer,
+  refresh: (context) async {
+    final response = await context.request(
+      path: '/v1/auth/refresh',
+      data: {'refreshToken': securelyReadRefreshToken()},
+    );
+
+    final json = Map<String, dynamic>.from(response.data as Map);
+    return AuthRefreshResult.success(
+      accessToken: json['accessToken'] as String,
+      refreshToken: json['refreshToken'] as String?,
+      expiresAt: DateTime.parse(json['expiresAt'] as String),
+    );
+  },
+);
 ```
 
-Listen for auth failures:
+Concurrent unauthorized requests share one refresh future. Each original request can be retried at most once.
+
+## Observe authentication
 
 ```dart
-AuthEvents.onUnauthorized.listen((event) {
-  // Refresh a token or send the user back to sign in.
+final current = connection.auth.current;
+
+final subscription = connection.auth.changes.listen((session) {
+  switch (session.status) {
+    case AuthSessionStatus.authenticated:
+      // Start authenticated application services.
+    case AuthSessionStatus.refreshing:
+      // Keep the authenticated shell while refresh is in progress.
+    case AuthSessionStatus.expired:
+    case AuthSessionStatus.unauthenticated:
+      // Stop protected services or route to sign in.
+    default:
+      break;
+  }
 });
-
-AuthEvents.onForbidden.listen((event) {
-  // Handle permission failures.
-});
 ```
 
-Work with cookies:
+Application state may cache user/profile DTOs, but it should not duplicate tokens, cookies, expiry calculations, or bridge authentication status.
+
+## Logout
+
+Call the backend logout endpoint first when one exists, then clear the connection-owned local state:
 
 ```dart
-final hasRefreshToken = await CookieManager.has('refresh_token');
-
-CookieEvents.onCookieSet('refresh_token').listen((event) {
-  // React to cookie changes.
-});
+await api.userAuth.logoutCurrentSession();
+await connection.logout();
 ```
 
-Clear local state during logout:
+`connection.logout()` clears only this connection's authentication credentials and namespaced cache. It does not affect other configured APIs.
+
+## Structured logging
+
+Logging is disabled by default. Enable it explicitly for development or provide a production telemetry sink:
 
 ```dart
-await Server.logout(tokenKey: 'access_token');
+final events = <ApiLogEvent>[];
+
+final logging = ApiLoggingConfig(
+  enabled: true,
+  minimumLevel: ApiLogLevel.info,
+  sink: events.add,
+  logRequestHeaders: true,
+  logResponseHeaders: true,
+  logRequestBody: true,
+  logResponseBody: false,
+);
 ```
 
-## Example
+Before any event reaches a sink, the bridge recursively redacts:
 
-See the `example/` app for a minimal JSONPlaceholder request using the configured `ApiClient`.
+- authorization and proxy-authorization headers;
+- cookies and set-cookie headers;
+- API keys;
+- passwords, passcodes, PINs, and secrets;
+- access, refresh, temporary, and identity tokens;
+- sensitive nested map and JSON-string fields.
+
+Multipart logs contain only field names, filenames, and byte lengths. Raw file contents are never logged.
+
+Every request log carries a connection-scoped request ID, method, URI, status, duration, retry count, and whether authentication was actually applied.
+
+## Legacy API
+
+`Server`, `ApiClient`, `AuthStrategy`, and Riverpod's `apiProvider` remain available for compatibility. New generated packages should use `FlutterApiBridge`, `ApiConnection`, and `ApiAuth`.
+
+The legacy debug logger no longer prints request/response bodies or credential-bearing headers.
+
+## Validation
+
+```bash
+flutter pub get
+dart format --set-exit-if-changed .
+flutter analyze
+flutter test
+dart pub publish --dry-run
+```
