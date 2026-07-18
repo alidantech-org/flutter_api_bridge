@@ -1,12 +1,17 @@
 import 'dart:developer' as developer;
 
-/// Severity used by bridge log events.
 enum ApiLogLevel { debug, info, warning, error }
 
-/// Kind of activity represented by a structured bridge log event.
-enum ApiLogEventType { request, response, failure, auth, lifecycle }
+enum ApiLogEventType {
+  request,
+  response,
+  failure,
+  retry,
+  cache,
+  auth,
+  lifecycle,
+}
 
-/// Immutable structured log event emitted by the bridge.
 class ApiLogEvent {
   const ApiLogEvent({
     required this.level,
@@ -17,6 +22,9 @@ class ApiLogEvent {
     this.path,
     this.statusCode,
     this.duration,
+    this.requestId,
+    this.operationId,
+    this.attempt,
     this.data = const <String, Object?>{},
     this.error,
     this.stackTrace,
@@ -30,19 +38,20 @@ class ApiLogEvent {
   final String? path;
   final int? statusCode;
   final Duration? duration;
+  final String? requestId;
+  final String? operationId;
+  final int? attempt;
   final Map<String, Object?> data;
   final Object? error;
   final StackTrace? stackTrace;
 }
 
-/// Consumer-replaceable destination for bridge logs.
 abstract interface class ApiLogger {
   const ApiLogger();
 
   void log(ApiLogEvent event);
 }
 
-/// Default logger backed by dart:developer.
 class DeveloperApiLogger implements ApiLogger {
   const DeveloperApiLogger({this.name = 'flutter_api_bridge'});
 
@@ -50,13 +59,19 @@ class DeveloperApiLogger implements ApiLogger {
 
   @override
   void log(ApiLogEvent event) {
+    const redactor = ApiLogRedactor(ApiLoggingConfig.defaultSensitiveKeys);
+    final safeData = redactor.redact(event.data);
     final details = <String>[
+      event.type.name,
+      if (event.operationId != null) event.operationId!,
       if (event.method != null) event.method!,
       if (event.path != null) event.path!,
       if (event.statusCode != null) 'HTTP ${event.statusCode}',
       if (event.duration != null) '${event.duration!.inMilliseconds}ms',
-      if (event.data.isNotEmpty) event.data.toString(),
-    ].join(' ');
+      if (event.attempt != null) 'attempt ${event.attempt}',
+      if (event.requestId != null) 'request ${event.requestId}',
+      if (safeData is Map && safeData.isNotEmpty) safeData.toString(),
+    ].join(' · ');
 
     developer.log(
       details.isEmpty ? event.message : '${event.message} | $details',
@@ -74,7 +89,6 @@ class DeveloperApiLogger implements ApiLogger {
   }
 }
 
-/// Logging behavior for one bridge installation.
 class ApiLoggingConfig {
   const ApiLoggingConfig({
     this.enabled = true,
@@ -92,6 +106,7 @@ class ApiLoggingConfig {
 
   static const Set<String> defaultSensitiveKeys = <String>{
     'authorization',
+    'proxy-authorization',
     'cookie',
     'set-cookie',
     'password',
@@ -112,7 +127,6 @@ class ApiLoggingConfig {
   };
 }
 
-/// Redacts nested maps and iterables before values reach a logger.
 class ApiLogRedactor {
   const ApiLogRedactor(this.sensitiveKeys);
 
@@ -134,10 +148,14 @@ class ApiLogRedactor {
   }
 
   bool _isSensitive(String key) {
-    final normalized = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '');
+    final normalized =
+        key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '');
     return sensitiveKeys.any((candidate) {
-      final normalizedCandidate = candidate.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '');
-      return normalized == normalizedCandidate || normalized.contains(normalizedCandidate);
+      final normalizedCandidate = candidate
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9-]'), '');
+      return normalized == normalizedCandidate ||
+          normalized.contains(normalizedCandidate);
     });
   }
 }
