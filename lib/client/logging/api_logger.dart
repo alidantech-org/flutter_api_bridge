@@ -371,7 +371,7 @@ class ApiLogFormatter {
       ApiLogEventType.response => _response(event, options),
       ApiLogEventType.failure => _error(event, safeData, options),
       ApiLogEventType.retry => _retry(event),
-      ApiLogEventType.cache => _cache(event),
+      ApiLogEventType.cache => _cache(event, safeData),
       ApiLogEventType.auth => _auth(safeData),
       ApiLogEventType.lifecycle => 'LIFECYCLE: ${event.message}',
     };
@@ -408,8 +408,8 @@ class ApiLogFormatter {
     return 'RETRY: ${_operation(event)} · attempt $attempt/$total · in ${delay}ms';
   }
 
-  String _cache(ApiLogEvent event) =>
-      'CACHE: ${_operation(event)} · ${event.data['cache'] ?? 'hit'}';
+  String _cache(ApiLogEvent event, Map<String, Object?> data) =>
+      'CACHE: ${_operation(event)} · ${data['cache'] ?? 'hit'}';
 
   String _auth(Map<String, Object?> data) =>
       'AUTH: ${data['status'] ?? 'unknown'}';
@@ -430,7 +430,7 @@ class ApiLogFormatter {
     if (event.code != null) output.add('code=${event.code}');
     for (final entry in data.entries) {
       if (entry.key == 'status' ||
-          entry.key == 'cache' ||
+          event.type == ApiLogEventType.cache && entry.key == 'cache' ||
           entry.key == 'body' && entry.value == null) {
         continue;
       }

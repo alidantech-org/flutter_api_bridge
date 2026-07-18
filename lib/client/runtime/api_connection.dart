@@ -347,7 +347,7 @@ class ApiConnection {
           reason: _retryReason(error),
         );
         await Future<void>.delayed(delay);
-      } catch (error, stackTrace) {
+      } catch (error) {
         return _NetworkResult<T>(
           result: ApiError<T>(
             message: 'An unexpected error occurred',
@@ -359,8 +359,6 @@ class ApiConnection {
               attempt: attempt,
             ),
           ),
-          unexpectedError: error,
-          stackTrace: stackTrace,
           attempt: attempt,
         );
       }
@@ -650,7 +648,7 @@ class ApiConnection {
         attempt: 1,
         maxAttempts: _maxAttempts(request),
         options: context.options,
-        data: data,
+        data: _safeLogData(context.options, data),
       ),
     );
   }
@@ -695,7 +693,7 @@ class ApiConnection {
         source: source,
         attempt: attempt,
         options: context.options,
-        data: data,
+        data: _safeLogData(context.options, data),
       ),
     );
   }
@@ -723,8 +721,6 @@ class ApiConnection {
           'headers': network.response!.headers.map,
         if (context.options.responseBody) 'body': network.responseBody,
       },
-      error: network.unexpectedError ?? network.exception,
-      stackTrace: network.stackTrace ?? network.exception?.stackTrace,
     );
   }
 
@@ -736,8 +732,6 @@ class ApiConnection {
     int? statusCode,
     int? attempt,
     Map<String, Object?> data = const <String, Object?>{},
-    Object? error,
-    StackTrace? stackTrace,
   }) {
     _emit(
       ApiErrorLogEvent(
@@ -751,11 +745,10 @@ class ApiConnection {
         attempt: attempt,
         code: code,
         options: context.options,
-        data: <String, Object?>{'message': message, ...data},
-        error: context.options.level == ApiLoggingLevel.detailed ? error : null,
-        stackTrace: context.options.level == ApiLoggingLevel.detailed
-            ? stackTrace
-            : null,
+        data: _safeLogData(
+          context.options,
+          <String, Object?>{'message': message, ...data},
+        ),
       ),
     );
   }
@@ -776,9 +769,11 @@ class ApiConnection {
         attempt: attempt,
         maxAttempts: maxAttempts,
         retryDelay: delay,
-        code: reason,
         options: context.options,
-        data: <String, Object?>{'reason': reason},
+        data: _safeLogData(
+          context.options,
+          <String, Object?>{'reason': reason},
+        ),
       ),
     );
   }
@@ -793,7 +788,7 @@ class ApiConnection {
               (file) => <String, Object?>{
                 'field': file.field,
                 'filename': file.filename,
-                'size': file.length,
+                'size': file.bytes?.length ?? file.length,
                 'source': file.path != null
                     ? 'path'
                     : file.bytes != null
@@ -841,6 +836,20 @@ class ApiConnection {
   String _retryReason(DioException error) {
     final raw = asResponseMap(error.response?.data);
     return _errorCode(error, raw, null);
+  }
+
+  Map<String, Object?> _safeLogData(
+    ApiResolvedLogOptions options,
+    Map<String, Object?> data,
+  ) {
+    try {
+      final safe = options.redactor.redact(data);
+      return safe is Map<String, Object?>
+          ? safe
+          : const <String, Object?>{};
+    } catch (_) {
+      return const <String, Object?>{'diagnostic': '[REDACTION_FAILED]'};
+    }
   }
 
   void _emit(ApiLogEvent event) {
@@ -920,8 +929,6 @@ class _NetworkResult<T> {
     this.responseBody,
     this.exception,
     this.response,
-    this.unexpectedError,
-    this.stackTrace,
     this.attempt,
   });
 
@@ -929,8 +936,6 @@ class _NetworkResult<T> {
   final dynamic responseBody;
   final DioException? exception;
   final Response<dynamic>? response;
-  final Object? unexpectedError;
-  final StackTrace? stackTrace;
   final int? attempt;
 }
 

@@ -305,10 +305,10 @@ class ApiAuth {
           level: importantFailure ? ApiLogLevel.warning : ApiLogLevel.info,
           timestamp: next.changedAt,
           options: options,
-          data: <String, Object?>{
+          data: options.redactor.redact(<String, Object?>{
             'status': next.status.name,
             if (next.reason != null) 'reason': next.reason,
-          },
+          }) as Map<String, Object?>,
         ),
       );
     } catch (_) {
