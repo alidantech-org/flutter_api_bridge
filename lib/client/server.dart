@@ -1,105 +1,86 @@
-import 'package:hive_flutter/hive_flutter.dart';
-
-import 'api/api_cache.dart';
-import 'api/api_client.dart';
 import 'auth/api_auth.dart';
 import 'auth/auth_strategy.dart';
-import 'cookies/cookie_manager.dart';
+import 'config/api_bridge_config.dart';
 import 'logging/api_logger.dart';
-import 'server_config.dart';
+import 'runtime/api_connection.dart';
+import 'runtime/flutter_api_bridge.dart';
 
-export 'api/api_client.dart'
-    show ApiClient, AuthEvents, UnauthorizedEvent, ForbiddenEvent;
 export 'api/api_cache.dart';
+export 'api/api_client.dart';
 export 'api/api_envelope.dart';
+export 'api/api_normalizer.dart';
 export 'api/api_provider.dart';
 export 'api/api_request.dart';
 export 'api/api_request_options.dart';
 export 'api/api_result.dart';
 export 'auth/api_auth.dart';
 export 'auth/auth_strategy.dart';
-export 'cookies/cookie_events.dart';
+export 'config/api_bridge_config.dart';
 export 'cookies/cookie_manager.dart';
 export 'logging/api_logger.dart';
-export 'server_config.dart';
-export 'upload/upload_provider.dart';
+export 'runtime/api_connection.dart';
+export 'runtime/flutter_api_bridge.dart';
 export 'upload/upload_progress.dart';
+export 'upload/upload_provider.dart';
 
-/// Legacy global bridge entry point.
+/// Legacy default connection wrapper.
 ///
-/// New generated clients should use connection-scoped APIs, but this class
-/// remains supported while consumers migrate.
+/// Generated packages should use [FlutterApiBridge] with their own stable key.
 class Server {
   Server._();
 
-  static ApiAuth? _auth;
+  static const String connectionKey = 'default';
 
-  /// Authoritative transport-auth state for the configured server.
-  static ApiAuth get auth {
-    final value = _auth;
-    if (value == null) {
-      throw StateError('Server is not initialized. Call Server.init() first.');
-    }
-    return value;
-  }
+  static ApiConnection get connection =>
+      FlutterApiBridge.requireConnection(connectionKey);
+  static ApiAuth get auth => connection.auth;
 
   static Future<void> init({
     required String baseUrl,
     required AuthStrategy authStrategy,
-    String defaultVersion = '',
     Duration defaultCacheTtl = const Duration(minutes: 5),
-    String? apiKey,
+    ApiCachePolicy defaultCachePolicy = ApiCachePolicy.networkFirst,
+    bool cookiesEnabled = true,
+    Map<String, String> defaultHeaders = const <String, String>{},
+    ApiRetryConfig retry = const ApiRetryConfig(),
     ApiLogger logger = const DeveloperApiLogger(),
     ApiLoggingConfig logging = const ApiLoggingConfig(),
+    ApiClientIdentityProvider? clientIdentity,
   }) async {
-    await Hive.initFlutter();
-
-    ServerConfig.baseUrl = baseUrl;
-    ServerConfig.defaultCacheTtl = defaultCacheTtl;
-    ServerConfig.apiKey = apiKey;
-
-    await ApiCache.init();
-    await CookieManager.init(baseUrl);
-
-    final previousAuth = _auth;
-    if (previousAuth != null) await previousAuth.dispose();
-
-    final configuredAuth = ApiAuth(
-      strategy: authStrategy,
-      logger: logger,
-      logging: logging,
+    await FlutterApiBridge.configure(
+      key: connectionKey,
+      config: ApiBridgeConfig(
+        baseUri: Uri.parse(baseUrl),
+        auth: authStrategy,
+        cookiesEnabled: cookiesEnabled,
+        defaultHeaders: defaultHeaders,
+        cache: ApiCacheConfig(
+          defaultTtl: defaultCacheTtl,
+          defaultPolicy: defaultCachePolicy,
+        ),
+        retry: retry,
+        logger: logger,
+        logging: logging,
+        clientIdentity: clientIdentity,
+      ),
     );
-    _auth = configuredAuth;
-
-    ApiClient.init(
-      baseUrl: baseUrl,
-      authStrategy: authStrategy,
-      auth: configuredAuth,
-      logger: logger,
-      logging: logging,
-    );
-
-    await configuredAuth.initialize();
   }
 
-  static Future<void> clearCache() => ApiCache.clearAll();
+  static Future<void> initializeUserSession({
+    required String sessionId,
+    String? bearerToken,
+    Map<String, String>? authHeaders,
+    Map<String, Object?> metadata = const <String, Object?>{},
+  }) =>
+      connection.initializeUserSession(
+        sessionId: sessionId,
+        bearerToken: bearerToken,
+        authHeaders: authHeaders,
+        metadata: metadata,
+      );
 
-  /// Clears bridge-managed transport authentication.
-  static Future<void> clearAuth({String? tokenKey}) async {
-    final configuredAuth = _auth;
-    if (configuredAuth != null) {
-      await configuredAuth.clear();
-    } else if (tokenKey != null) {
-      // Compatibility for callers clearing before initialization.
-      await BearerStrategy.clearToken(key: tokenKey);
-    }
-    ApiClient.reset();
-  }
-
-  /// Clears cache, credentials, and cookies.
-  static Future<void> logout({String? tokenKey}) async {
-    await clearCache();
-    await clearAuth(tokenKey: tokenKey);
-    await CookieManager.clearAll();
-  }
+  static Future<void> clearCache() => connection.clearAllCache();
+  static Future<void> clearSessionCache(String sessionId) =>
+      connection.clearSessionCache(sessionId);
+  static Future<void> logout() => connection.logout();
 }
