@@ -1,143 +1,202 @@
 import 'package:dio/dio.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../cookies/cookie_manager.dart';
+
+/// Minimal secure key/value abstraction so applications can replace or test
+/// credential persistence without changing generated clients.
+abstract interface class ApiCredentialStorage {
+  const ApiCredentialStorage();
+
+  Future<String?> read({required String key});
+  Future<void> write({required String key, required String? value});
+  Future<void> delete({required String key});
+}
+
+class FlutterApiCredentialStorage implements ApiCredentialStorage {
+  const FlutterApiCredentialStorage({
+    this.storage = const FlutterSecureStorage(),
+  });
+
+  final FlutterSecureStorage storage;
+
+  @override
+  Future<String?> read({required String key}) => storage.read(key: key);
+
+  @override
+  Future<void> write({required String key, required String? value}) =>
+      storage.write(key: key, value: value);
+
+  @override
+  Future<void> delete({required String key}) => storage.delete(key: key);
+}
+
+/// Connection-scoped facilities available to authentication strategies.
+class AuthStrategyContext {
+  const AuthStrategyContext({
+    required this.connectionKey,
+    required this.storageNamespace,
+    required this.cookies,
+    required this.secureStorage,
+  });
+
+  final String connectionKey;
+  final String storageNamespace;
+  final ApiCookieManager cookies;
+  final ApiCredentialStorage secureStorage;
+
+  String secureKey(String name) =>
+      'flutter_api_bridge.$storageNamespace.auth.${name.trim()}';
+}
 
 /// Base transport-auth strategy.
 ///
-/// Application-specific login and refresh endpoints do not belong here. A
-/// generated client performs those calls, then [ApiAuth] asks the strategy to
-/// persist or clear the resulting transport credential.
+/// Refresh endpoints remain generated-package/application concerns. Strategies
+/// only restore, apply, persist, and clear transport credentials.
 abstract class AuthStrategy {
   const AuthStrategy();
 
-  /// Attach credentials before a protected request is sent.
-  Future<void> apply(RequestOptions options);
+  Future<void> initialize(AuthStrategyContext context) async {}
 
-  /// Whether persisted transport credentials are currently available.
-  Future<bool> hasCredentials() async => false;
+  Future<void> apply(
+    RequestOptions options,
+    AuthStrategyContext context,
+  );
 
-  /// Persist a credential after application authentication succeeds.
-  /// Cookie strategies may ignore [credential] because Dio persists cookies.
-  Future<void> saveCredentials(String? credential) async {}
+  Future<bool> hasCredentials(AuthStrategyContext context) async => false;
 
-  /// Remove locally persisted transport credentials.
-  Future<void> clearCredentials() async {}
+  Future<void> saveCredentials(
+    String? credential,
+    AuthStrategyContext context,
+  ) async {}
 
-  /// Called once when the bridge transitions to an expired session.
-  Future<void> onUnauthorized() async {}
+  Future<void> clearCredentials(AuthStrategyContext context) async {}
+
+  Future<void> onUnauthorized(AuthStrategyContext context) async {}
 }
 
-/// Persistent bearer-token authentication.
+/// No automatic authorization header. Per-session or per-request headers may
+/// still be supplied by the caller.
+class NoAuthStrategy extends AuthStrategy {
+  const NoAuthStrategy();
+
+  @override
+  Future<void> apply(
+    RequestOptions options,
+    AuthStrategyContext context,
+  ) async {}
+}
+
+/// Persistent bearer-token authentication backed by platform secure storage.
 class BearerStrategy extends AuthStrategy {
-  BearerStrategy({required this.tokenKey});
+  const BearerStrategy({
+    this.tokenKey = 'access_token',
+    this.headerName = 'Authorization',
+    this.scheme = 'Bearer',
+  });
 
   final String tokenKey;
+  final String headerName;
+  final String scheme;
 
-  static final Map<String, String> _memoryTokens = <String, String>{};
+  String _key(AuthStrategyContext context) => context.secureKey(tokenKey);
 
-  static Future<void> saveToken(String token, {required String key}) async {
-    final clean = token.trim();
-    if (clean.isEmpty) {
-      throw ArgumentError.value(token, 'token', 'Bearer token cannot be empty.');
-    }
-    _memoryTokens[key] = clean;
-    final box = await Hive.openBox<String>('server_auth');
-    await box.put(key, clean);
-  }
-
-  static Future<void> clearToken({required String key}) async {
-    _memoryTokens.remove(key);
-    final box = await Hive.openBox<String>('server_auth');
-    await box.delete(key);
-  }
-
-  Future<String?> getToken() async {
-    final memory = _memoryTokens[tokenKey];
-    if (memory != null && memory.isNotEmpty) return memory;
-
-    final box = await Hive.openBox<String>('server_auth');
-    final stored = box.get(tokenKey)?.trim();
-    if (stored != null && stored.isNotEmpty) {
-      _memoryTokens[tokenKey] = stored;
-      return stored;
-    }
-    return null;
+  Future<String?> getToken(AuthStrategyContext context) async {
+    final value = await context.secureStorage.read(key: _key(context));
+    final clean = value?.trim();
+    return clean == null || clean.isEmpty ? null : clean;
   }
 
   @override
-  Future<void> apply(RequestOptions options) async {
-    final token = await getToken();
-    if (token != null) {
-      options.headers['Authorization'] = 'Bearer $token';
-    }
+  Future<void> apply(
+    RequestOptions options,
+    AuthStrategyContext context,
+  ) async {
+    final token = await getToken(context);
+    if (token == null) return;
+    options.headers.putIfAbsent(
+      headerName,
+      () => scheme.trim().isEmpty ? token : '${scheme.trim()} $token',
+    );
   }
 
   @override
-  Future<bool> hasCredentials() async => (await getToken()) != null;
+  Future<bool> hasCredentials(AuthStrategyContext context) async =>
+      (await getToken(context)) != null;
 
   @override
-  Future<void> saveCredentials(String? credential) async {
+  Future<void> saveCredentials(
+    String? credential,
+    AuthStrategyContext context,
+  ) async {
     final value = credential?.trim();
     if (value == null || value.isEmpty) {
-      throw ArgumentError('Bearer authentication requires a credential.');
+      throw ArgumentError('Bearer authentication requires a token.');
     }
-    await saveToken(value, key: tokenKey);
+    await context.secureStorage.write(key: _key(context), value: value);
   }
 
   @override
-  Future<void> clearCredentials() => clearToken(key: tokenKey);
+  Future<void> clearCredentials(AuthStrategyContext context) =>
+      context.secureStorage.delete(key: _key(context));
 }
 
-/// Cookie authentication managed by Dio's persistent cookie jar.
+/// Browser-like persistent cookie authentication.
+///
+/// When [sessionCookieNames] is empty, any non-expired cookie applicable to the
+/// configured API origin is enough to restore transport authentication. The
+/// generated package should validate the session by calling its typed account
+/// bootstrap endpoint; a 401 will expire the bridge session.
 class CookieStrategy extends AuthStrategy {
-  const CookieStrategy({this.sessionCookieNames = const <String>[]});
+  const CookieStrategy({
+    this.sessionCookieNames = const <String>[],
+  });
 
-  /// Cookie names that indicate a restorable authenticated session.
-  /// Leave empty when the server uses an opaque cookie setup and call
-  /// `auth.completeAuthentication()` explicitly after login.
   final List<String> sessionCookieNames;
 
   @override
-  Future<void> apply(RequestOptions options) async {
-    // CookieManager's interceptor attaches cookies.
+  Future<void> apply(
+    RequestOptions options,
+    AuthStrategyContext context,
+  ) async {
+    // Dio's cookie interceptor applies all eligible persisted cookies.
   }
 
   @override
-  Future<bool> hasCredentials() async {
-    if (sessionCookieNames.isEmpty) return false;
-    final box = await Hive.openBox<String>('server_auth_cookie_state');
-    return sessionCookieNames.any((name) => box.get(name) == 'present');
-  }
-
-  @override
-  Future<void> saveCredentials(String? credential) async {
-    if (sessionCookieNames.isEmpty) return;
-    final box = await Hive.openBox<String>('server_auth_cookie_state');
-    for (final name in sessionCookieNames) {
-      await box.put(name, 'present');
+  Future<bool> hasCredentials(AuthStrategyContext context) async {
+    if (sessionCookieNames.isEmpty) {
+      return context.cookies.hasAny();
     }
+    return context.cookies.hasAnyNamed(sessionCookieNames);
   }
 
   @override
-  Future<void> clearCredentials() async {
-    if (sessionCookieNames.isEmpty) return;
-    final box = await Hive.openBox<String>('server_auth_cookie_state');
-    for (final name in sessionCookieNames) {
-      await box.delete(name);
-    }
-  }
+  Future<void> clearCredentials(AuthStrategyContext context) =>
+      context.cookies.clearAll();
 }
 
 /// Static API-key authentication.
 class ApiKeyStrategy extends AuthStrategy {
-  const ApiKeyStrategy({required this.apiKey});
+  const ApiKeyStrategy({
+    required this.apiKey,
+    this.headerName = 'x-api-key',
+  });
 
   final String apiKey;
+  final String headerName;
 
   @override
-  Future<void> apply(RequestOptions options) async {
-    options.headers['x-api-key'] = apiKey;
+  Future<void> apply(
+    RequestOptions options,
+    AuthStrategyContext context,
+  ) async {
+    final value = apiKey.trim();
+    if (value.isNotEmpty) {
+      options.headers.putIfAbsent(headerName, () => value);
+    }
   }
 
   @override
-  Future<bool> hasCredentials() async => apiKey.trim().isNotEmpty;
+  Future<bool> hasCredentials(AuthStrategyContext context) async =>
+      apiKey.trim().isNotEmpty;
 }
