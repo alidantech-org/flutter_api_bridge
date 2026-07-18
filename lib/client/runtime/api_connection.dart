@@ -844,9 +844,7 @@ class ApiConnection {
   ) {
     try {
       final safe = options.redactor.redact(data);
-      return safe is Map<String, Object?>
-          ? safe
-          : const <String, Object?>{};
+      return safe is Map<String, Object?> ? safe : const <String, Object?>{};
     } catch (_) {
       return const <String, Object?>{'diagnostic': '[REDACTION_FAILED]'};
     }
