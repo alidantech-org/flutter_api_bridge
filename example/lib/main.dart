@@ -7,6 +7,11 @@ Future<void> main() async {
   await Server.init(
     baseUrl: 'https://jsonplaceholder.typicode.com',
     authStrategy: const CookieStrategy(),
+    logging: const ApiLoggingConfig(
+      level: ApiLoggingLevel.basic,
+      showDuration: true,
+      showRequestId: false,
+    ),
   );
 
   runApp(const MyApp());

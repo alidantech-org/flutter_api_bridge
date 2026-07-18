@@ -35,6 +35,12 @@ await FlutterApiBridge.configure(
       defaultTtl: Duration(minutes: 5),
     ),
     retry: const ApiRetryConfig(maxAttempts: 3),
+    logging: const ApiLoggingConfig(
+      level: ApiLoggingLevel.basic,
+      showDuration: true,
+      showRequestId: false,
+      prettyPrintBodies: true,
+    ),
     clientIdentity: () => const ApiClientIdentity(
       applicationName: 'RiderescueDriver',
       applicationVersion: '2.4.1',
@@ -153,12 +159,14 @@ All requests accept common options for:
 - idempotency keys;
 - cache tag/path invalidation;
 - operation IDs for diagnostics.
+- client-only per-call logging controls.
 
 ```dart
 const ApiRequestOptions(
   headers: <String, String>{'X-Tenant': 'company-7'},
   cookies: <String, String>{'preview': 'enabled'},
   idempotencyKey: 'booking-create-123',
+  log: ApiCallLogOptions(enabled: false),
 );
 ```
 
@@ -177,10 +185,108 @@ endpoint orchestration remains the generated package or application's concern.
 
 ## Logging
 
-The bridge emits structured `ApiLogEvent` values with request IDs, operation
-IDs, attempt numbers, durations, connection/session metadata, and cache/retry
-events. Sensitive headers, cookies, tokens, passwords, secrets, OTP values,
-and authentication codes are redacted.
+The default logger emits compact, production-friendly summaries. Request and
+response bodies, headers, query parameters, cookies, complete request IDs,
+session IDs, and stack traces are not printed by default.
+
+```text
+REQ: user_auth.getCurrentAuthBootstrap · GET · /v1/user/auth/bootstrap
+  ↳ attempt=1
+RES: user_auth.getCurrentAuthBootstrap · GET · /v1/user/auth/bootstrap · 200 · 184ms
+  ↳ source=network
+ERR: booking.createBooking · POST · /v1/bookings · 422 · 197ms
+  ↳ code=validation_failed · message="Vehicle is required"
+RETRY: user_auth.refreshSession · attempt 2/3 · in 800ms
+  ↳ reason=connection_timeout
+CACHE: jobs.listAvailableJobs · hit
+  ↳ source=disk · age=42s
+AUTH: authenticated
+  ↳ reason=credentials_restored
+```
+
+### Global configuration
+
+`ApiLoggingLevel` controls package verbosity:
+
+- `none`: no package logs;
+- `errors`: terminal request and important authentication failures only;
+- `basic`: concise request, response, error, retry, cache, and auth events;
+- `detailed`: basic events plus metadata explicitly enabled below.
+
+```dart
+const ApiLoggingConfig(
+  level: ApiLoggingLevel.detailed,
+  logRequestHeaders: false,
+  logRequestBody: false,
+  logResponseHeaders: false,
+  logResponseBody: false,
+  logQueryParameters: false,
+  logCookies: false,
+  showDuration: true,
+  showRequestId: false,
+  prettyPrintBodies: true,
+  useAnsi: false,
+);
+```
+
+`enabled: false` remains supported for compatibility. Prefer
+`level: ApiLoggingLevel.none` in new code. `ApiLogLevel` remains the severity
+attached to a structured event; it is separate from `ApiLoggingLevel`.
+
+### Per-operation debugging
+
+`ApiCallLogOptions` is immutable and stored only in `ApiRequestOptions`. The
+shared caller reads it locally; it is never serialized into headers, query
+parameters, request bodies, cookies, or DTOs.
+
+```dart
+const options = ApiRequestOptions(
+  log: ApiCallLogOptions(
+    requestBody: true,
+    responseBody: true,
+  ),
+);
+```
+
+Disable one operation without changing global configuration:
+
+```dart
+const options = ApiRequestOptions(
+  log: ApiCallLogOptions(enabled: false),
+);
+```
+
+Generated packages should expose `ApiCallLogOptions? log` on each operation
+and forward it into request options. Existing generated calls remain valid
+because the argument is optional. Generator/template integration is tracked in
+[issue #15](https://github.com/alidantech-org/flutter_api_bridge/issues/15);
+this runtime repository intentionally does not patch generated operations.
+
+### Redaction guarantees
+
+Mandatory centralized redaction runs before every logger callback, including
+custom sinks. Explicit body/header/cookie flags never bypass it. Matching is
+case-insensitive across snake_case, kebab-case, and camelCase variants and
+includes passwords, tokens, authorization, cookies, secrets, API keys, OTPs,
+PINs, credentials, and signed URL parameters.
+
+The redactor also:
+
+- truncates long strings and large collections;
+- limits recursive depth and detects cycles;
+- strips URL user information and redacts sensitive query parameters;
+- summarizes binary data and streams;
+- reports multipart file counts and sizes without reading or printing bytes;
+- prevents redaction or logger failures from affecting API requests.
+
+Production applications should use `basic` or `errors`. Enable bodies only for
+the smallest possible scope and disable them again after diagnosis.
+
+### Custom sinks
+
+The runtime emits typed `ApiRequestLogEvent`, `ApiResponseLogEvent`,
+`ApiErrorLogEvent`, `ApiRetryLogEvent`, `ApiCacheLogEvent`, and
+`ApiAuthLogEvent` values through the existing `ApiLogger` abstraction.
 
 ```dart
 class AppApiLogger implements ApiLogger {
@@ -188,10 +294,15 @@ class AppApiLogger implements ApiLogger {
 
   @override
   void log(ApiLogEvent event) {
-    // Forward safe structured events to the application's logger.
+    // Metadata has already passed mandatory redaction.
+    // Forward it to logging, logger, Crashlytics, Sentry, or another sink.
   }
 }
 ```
+
+For callback-style integrations, use `CallbackApiLogger`. The default
+`DeveloperApiLogger` uses `ApiLogFormatter`; consumers can also format events
+directly with the formatter. ANSI output is off by default.
 
 ## Legacy `Server`
 

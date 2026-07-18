@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../config/api_bridge_config.dart';
+import '../logging/api_logger.dart';
 
 /// Shared request controls available on every generated operation.
 class ApiRequestOptions {
@@ -13,6 +14,7 @@ class ApiRequestOptions {
     this.idempotencyKey,
     this.cancelToken,
     this.operationId,
+    this.log,
     this.invalidateCacheTags = const <String>[],
     this.invalidateCachePaths = const <String>[],
     this.clearActiveSessionCache = false,
@@ -26,6 +28,7 @@ class ApiRequestOptions {
   final String? idempotencyKey;
   final CancelToken? cancelToken;
   final String? operationId;
+  final ApiCallLogOptions? log;
   final List<String> invalidateCacheTags;
   final List<String> invalidateCachePaths;
   final bool clearActiveSessionCache;
@@ -40,6 +43,8 @@ class ApiRequestOptions {
     String? idempotencyKey,
     CancelToken? cancelToken,
     String? operationId,
+    ApiCallLogOptions? log,
+    bool clearLog = false,
     List<String>? invalidateCacheTags,
     List<String>? invalidateCachePaths,
     bool? clearActiveSessionCache,
@@ -53,6 +58,7 @@ class ApiRequestOptions {
         idempotencyKey: idempotencyKey ?? this.idempotencyKey,
         cancelToken: cancelToken ?? this.cancelToken,
         operationId: operationId ?? this.operationId,
+        log: clearLog ? null : log ?? this.log,
         invalidateCacheTags: invalidateCacheTags ?? this.invalidateCacheTags,
         invalidateCachePaths: invalidateCachePaths ?? this.invalidateCachePaths,
         clearActiveSessionCache:
@@ -70,6 +76,7 @@ class ApiGetRequestOptions extends ApiRequestOptions {
     super.idempotencyKey,
     super.cancelToken,
     super.operationId,
+    super.log,
     super.invalidateCacheTags,
     super.invalidateCachePaths,
     super.clearActiveSessionCache,
@@ -104,6 +111,8 @@ class ApiGetRequestOptions extends ApiRequestOptions {
     String? idempotencyKey,
     CancelToken? cancelToken,
     String? operationId,
+    ApiCallLogOptions? log,
+    bool clearLog = false,
     List<String>? invalidateCacheTags,
     List<String>? invalidateCachePaths,
     bool? clearActiveSessionCache,
@@ -126,6 +135,7 @@ class ApiGetRequestOptions extends ApiRequestOptions {
         idempotencyKey: idempotencyKey ?? this.idempotencyKey,
         cancelToken: cancelToken ?? this.cancelToken,
         operationId: operationId ?? this.operationId,
+        log: clearLog ? null : log ?? this.log,
         invalidateCacheTags: invalidateCacheTags ?? this.invalidateCacheTags,
         invalidateCachePaths: invalidateCachePaths ?? this.invalidateCachePaths,
         clearActiveSessionCache:
@@ -150,6 +160,7 @@ class ApiUploadRequestOptions extends ApiRequestOptions {
     super.idempotencyKey,
     super.cancelToken,
     super.operationId,
+    super.log,
     super.invalidateCacheTags,
     super.invalidateCachePaths,
     super.clearActiveSessionCache,
@@ -169,6 +180,8 @@ class ApiUploadRequestOptions extends ApiRequestOptions {
     String? idempotencyKey,
     CancelToken? cancelToken,
     String? operationId,
+    ApiCallLogOptions? log,
+    bool clearLog = false,
     List<String>? invalidateCacheTags,
     List<String>? invalidateCachePaths,
     bool? clearActiveSessionCache,
@@ -183,6 +196,7 @@ class ApiUploadRequestOptions extends ApiRequestOptions {
         idempotencyKey: idempotencyKey ?? this.idempotencyKey,
         cancelToken: cancelToken ?? this.cancelToken,
         operationId: operationId ?? this.operationId,
+        log: clearLog ? null : log ?? this.log,
         invalidateCacheTags: invalidateCacheTags ?? this.invalidateCacheTags,
         invalidateCachePaths: invalidateCachePaths ?? this.invalidateCachePaths,
         clearActiveSessionCache:

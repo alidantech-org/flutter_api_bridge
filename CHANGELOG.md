@@ -43,3 +43,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Authentication strategy support.
 - API request options customization.
 - API envelope for structured responses.
+# Unreleased
+
+- Added compact structured `REQ`, `RES`, `ERR`, `RETRY`, `CACHE`, and `AUTH`
+  logging with total operation durations and network/cache source metadata.
+- Added `ApiLoggingLevel`, immutable `ApiCallLogOptions`, typed log event
+  subclasses, callback logger support, and configurable body formatting.
+- Added mandatory bounded redaction before custom logger callbacks, including
+  nested credentials, signed URLs, multipart uploads, binary data, streams,
+  long values, and cyclic objects.
+- Added client-only per-request logging options without changing transport,
+  serialization, cache, retry, cookie, or authentication semantics.
+- Preserved legacy `ApiLoggingConfig.enabled`, logging booleans, `ApiLogLevel`,
+  `ApiLogEvent`, and `ApiLogger` compatibility.
