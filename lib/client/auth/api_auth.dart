@@ -63,6 +63,7 @@ class ApiAuth {
       Map<String, String>.unmodifiable(_sessionHeaders);
 
   String get _sessionIdKey => _context.secureKey('session_id');
+  String get _expiredReasonKey => _context.secureKey('expired_reason');
   String _headersKey(String sessionId) =>
       _context.secureKey('session_headers.$sessionId');
 
@@ -73,16 +74,34 @@ class ApiAuth {
     if (restoredSessionId != null && restoredSessionId.trim().isNotEmpty) {
       await _restoreHeaders(restoredSessionId.trim());
     }
+
     final authenticated =
         await _strategy.hasCredentials(_context) || _sessionHeaders.isNotEmpty;
+    final expiredReason =
+        await _context.secureStorage.read(key: _expiredReasonKey);
+
+    if (!authenticated) {
+      await _context.secureStorage.delete(key: _expiredReasonKey);
+    }
+
+    final hasExpiredMarker = authenticated &&
+        expiredReason != null &&
+        expiredReason.trim().isNotEmpty;
+
     _set(
       AuthSession(
-        status: authenticated
-            ? AuthSessionStatus.authenticated
-            : AuthSessionStatus.anonymous,
+        status: hasExpiredMarker
+            ? AuthSessionStatus.expired
+            : authenticated
+                ? AuthSessionStatus.authenticated
+                : AuthSessionStatus.anonymous,
         changedAt: DateTime.now().toUtc(),
         sessionId: authenticated ? restoredSessionId?.trim() : null,
-        reason: authenticated ? 'credentials_restored' : 'no_credentials',
+        reason: hasExpiredMarker
+            ? expiredReason.trim()
+            : authenticated
+                ? 'credentials_restored'
+                : 'no_credentials',
       ),
     );
     return _current;
@@ -110,6 +129,7 @@ class ApiAuth {
       key: _sessionIdKey,
       value: cleanSessionId,
     );
+    await _context.secureStorage.delete(key: _expiredReasonKey);
 
     if (authHeaders != null) {
       _sessionHeaders = _cleanHeaders(authHeaders);
@@ -136,6 +156,7 @@ class ApiAuth {
     if (credential != null) {
       await _strategy.saveCredentials(credential, _context);
     }
+    await _context.secureStorage.delete(key: _expiredReasonKey);
     _set(
       AuthSession(
         status: AuthSessionStatus.authenticated,
@@ -161,6 +182,10 @@ class ApiAuth {
       return;
     }
     await _strategy.onUnauthorized(_context);
+    await _context.secureStorage.write(
+      key: _expiredReasonKey,
+      value: reason,
+    );
     _set(
       AuthSession(
         status: AuthSessionStatus.expired,
@@ -175,6 +200,7 @@ class ApiAuth {
     final sessionId = _current.sessionId;
     await _strategy.clearCredentials(_context);
     await _context.secureStorage.delete(key: _sessionIdKey);
+    await _context.secureStorage.delete(key: _expiredReasonKey);
     if (sessionId != null) {
       await _context.secureStorage.delete(key: _headersKey(sessionId));
     }
