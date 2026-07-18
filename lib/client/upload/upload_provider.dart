@@ -3,11 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api/api_request.dart';
-import '../api/api_request_options.dart';
-import '../api/api_result.dart';
 import '../server.dart';
-import 'upload_progress.dart';
 
 final _progressController = StreamController<UploadProgress>.broadcast();
 
@@ -44,9 +40,12 @@ class UploadNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
       idempotencyKey: original?.idempotencyKey,
       cancelToken: _cancelToken,
       operationId: original?.operationId,
-      invalidateCacheTags: original?.invalidateCacheTags ?? const <String>[],
-      invalidateCachePaths: original?.invalidateCachePaths ?? const <String>[],
-      clearActiveSessionCache: original?.clearActiveSessionCache ?? false,
+      invalidateCacheTags:
+          original?.invalidateCacheTags ?? const <String>[],
+      invalidateCachePaths:
+          original?.invalidateCachePaths ?? const <String>[],
+      clearActiveSessionCache:
+          original?.clearActiveSessionCache ?? false,
       onSendProgress: (sent, total) {
         _progressController.add(UploadProgress(sent: sent, total: total));
         original?.onSendProgress?.call(sent, total);
