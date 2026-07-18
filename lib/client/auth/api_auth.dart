@@ -55,6 +55,7 @@ class ApiAuth {
 
   AuthSession _current = AuthSession.initializing();
   Map<String, String> _sessionHeaders = const <String, String>{};
+  Future<void>? _expireFuture;
   bool _disposed = false;
 
   AuthSession get current => _current;
@@ -116,6 +117,7 @@ class ApiAuth {
     String? bearerToken,
     Map<String, String>? authHeaders,
   }) async {
+    await _waitForExpiry();
     final cleanSessionId = sessionId.trim();
     if (cleanSessionId.isEmpty) {
       throw ArgumentError.value(sessionId, 'sessionId', 'Cannot be empty.');
@@ -153,6 +155,7 @@ class ApiAuth {
 
   /// Compatibility helper for callers that do not yet use session IDs.
   Future<void> completeAuthentication({String? credential}) async {
+    await _waitForExpiry();
     if (credential != null) {
       await _strategy.saveCredentials(credential, _context);
     }
@@ -176,7 +179,26 @@ class ApiAuth {
     }
   }
 
-  Future<void> expire({String reason = 'unauthorized'}) async {
+  /// Expires the current session once, even when many requests return 401
+  /// concurrently. Refresh orchestration remains generated/application owned.
+  Future<void> expire({String reason = 'unauthorized'}) {
+    if (_current.status == AuthSessionStatus.expired ||
+        _current.status == AuthSessionStatus.anonymous) {
+      return Future<void>.value();
+    }
+    final existing = _expireFuture;
+    if (existing != null) return existing;
+
+    final operation = _performExpire(reason);
+    _expireFuture = operation;
+    return operation.whenComplete(() {
+      if (identical(_expireFuture, operation)) {
+        _expireFuture = null;
+      }
+    });
+  }
+
+  Future<void> _performExpire(String reason) async {
     if (_current.status == AuthSessionStatus.expired ||
         _current.status == AuthSessionStatus.anonymous) {
       return;
@@ -197,6 +219,7 @@ class ApiAuth {
   }
 
   Future<void> clear({String reason = 'logout'}) async {
+    await _waitForExpiry();
     final sessionId = _current.sessionId;
     await _strategy.clearCredentials(_context);
     await _context.secureStorage.delete(key: _sessionIdKey);
@@ -212,6 +235,11 @@ class ApiAuth {
         reason: reason,
       ),
     );
+  }
+
+  Future<void> _waitForExpiry() async {
+    final operation = _expireFuture;
+    if (operation != null) await operation;
   }
 
   Future<void> _restoreHeaders(String sessionId) async {
@@ -251,6 +279,7 @@ class ApiAuth {
 
   Future<void> dispose() async {
     if (_disposed) return;
+    await _waitForExpiry();
     _disposed = true;
     await _changes.close();
   }
