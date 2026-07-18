@@ -1,0 +1,53 @@
+name: Flutter package CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'chatgpt/**'
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify root formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze package
+        run: flutter analyze lib test
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Resolve generated package fixture
+        working-directory: tool/generated_runtime_fixture
+        run: flutter pub get
+
+      - name: Verify generated fixture formatting
+        working-directory: tool/generated_runtime_fixture
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze generated package fixture
+        working-directory: tool/generated_runtime_fixture
+        run: flutter analyze
+
+      - name: Test generated-package-only imports
+        working-directory: tool/generated_runtime_fixture
+        run: flutter test
+
+      - name: Validate package publication
+        run: flutter pub publish --dry-run

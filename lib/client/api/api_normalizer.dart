@@ -139,7 +139,10 @@ dynamic normalizeValue(dynamic value) {
   }
 
   if (value is Iterable && value is! String) {
-    return value.map(normalizeValue).where((item) => !shouldSkipValue(item)).toList();
+    return value
+        .map(normalizeValue)
+        .where((item) => !shouldSkipValue(item))
+        .toList();
   }
 
   return value;
@@ -274,7 +277,11 @@ dynamic tryToJson(dynamic value) {
 
     if (json == null) return null;
 
-    if (json is Map || json is Iterable || json is String || json is num || json is bool) {
+    if (json is Map ||
+        json is Iterable ||
+        json is String ||
+        json is num ||
+        json is bool) {
       return json;
     }
 

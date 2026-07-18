@@ -1,85 +1,86 @@
-// lib/server/server.dart
-//
-// Single barrel export + initialisation entry point.
-// Call [Server.init] once in main() before runApp().
-
-import 'package:hive_flutter/hive_flutter.dart';
-import 'api/api_cache.dart';
-import 'api/api_client.dart';
+import 'auth/api_auth.dart';
 import 'auth/auth_strategy.dart';
-import 'cookies/cookie_manager.dart';
-import 'server_config.dart';
+import 'config/api_bridge_config.dart';
+import 'logging/api_logger.dart';
+import 'runtime/api_connection.dart';
+import 'runtime/flutter_api_bridge.dart';
 
-// ── Public exports ───────────────────────────────────────────────────────────────
-
-export 'api/api_client.dart'
-    show ApiClient, AuthEvents, UnauthorizedEvent, ForbiddenEvent;
 export 'api/api_cache.dart';
+export 'api/api_client.dart';
 export 'api/api_envelope.dart';
+export 'api/api_normalizer.dart';
 export 'api/api_provider.dart';
 export 'api/api_request.dart';
 export 'api/api_request_options.dart';
 export 'api/api_result.dart';
+export 'auth/api_auth.dart';
 export 'auth/auth_strategy.dart';
-export 'cookies/cookie_events.dart';
+export 'config/api_bridge_config.dart';
 export 'cookies/cookie_manager.dart';
-export 'server_config.dart';
-export 'upload/upload_provider.dart';
+export 'logging/api_logger.dart';
+export 'runtime/api_connection.dart';
+export 'runtime/flutter_api_bridge.dart';
 export 'upload/upload_progress.dart';
+export 'upload/upload_provider.dart';
 
-// ── Initialisation ─────────────────────────────────────────────────────────────
-
+/// Legacy default connection wrapper.
+///
+/// Generated packages should use [FlutterApiBridge] with their own stable key.
 class Server {
   Server._();
 
-  /// Initialise the entire server layer.
-  /// Call once in [main] before [runApp].
-  ///
-  /// ```dart
-  /// await Server.init(
-  ///   baseUrl: 'https://api.example.com',
-  ///   authStrategy: BearerStrategy(tokenKey: 'access_token'),
-  ///   defaultCacheTtl: Duration(minutes: 5),
-  /// );
-  /// ```
+  static const String connectionKey = 'default';
+
+  static ApiConnection get connection =>
+      FlutterApiBridge.requireConnection(connectionKey);
+  static ApiAuth get auth => connection.auth;
+
   static Future<void> init({
     required String baseUrl,
     required AuthStrategy authStrategy,
-    String defaultVersion = '',
     Duration defaultCacheTtl = const Duration(minutes: 5),
-    String? apiKey,
+    ApiCachePolicy defaultCachePolicy = ApiCachePolicy.networkFirst,
+    bool cookiesEnabled = true,
+    Map<String, String> defaultHeaders = const <String, String>{},
+    ApiRetryConfig retry = const ApiRetryConfig(),
+    ApiLogger logger = const DeveloperApiLogger(),
+    ApiLoggingConfig logging = const ApiLoggingConfig(),
+    ApiClientIdentityProvider? clientIdentity,
   }) async {
-    // 1. Hive
-    await Hive.initFlutter();
-
-    // 2. Config
-    ServerConfig.baseUrl = baseUrl;
-    ServerConfig.defaultCacheTtl = defaultCacheTtl;
-    ServerConfig.apiKey = apiKey;
-
-    // 3. Cache
-    await ApiCache.init();
-
-    // 4. Cookies
-    await CookieManager.init(baseUrl);
-
-    // 5. Dio clients
-    ApiClient.init(baseUrl: baseUrl, authStrategy: authStrategy);
+    await FlutterApiBridge.configure(
+      key: connectionKey,
+      config: ApiBridgeConfig(
+        baseUri: Uri.parse(baseUrl),
+        auth: authStrategy,
+        cookiesEnabled: cookiesEnabled,
+        defaultHeaders: defaultHeaders,
+        cache: ApiCacheConfig(
+          defaultTtl: defaultCacheTtl,
+          defaultPolicy: defaultCachePolicy,
+        ),
+        retry: retry,
+        logger: logger,
+        logging: logging,
+        clientIdentity: clientIdentity,
+      ),
+    );
   }
 
-  /// Clear all cached API responses — call on logout.
-  static Future<void> clearCache() => ApiCache.clearAll();
+  static Future<void> initializeUserSession({
+    required String sessionId,
+    String? bearerToken,
+    Map<String, String>? authHeaders,
+    Map<String, Object?> metadata = const <String, Object?>{},
+  }) =>
+      connection.initializeUserSession(
+        sessionId: sessionId,
+        bearerToken: bearerToken,
+        authHeaders: authHeaders,
+        metadata: metadata,
+      );
 
-  /// Clear auth token and Dio instances — call on logout.
-  static Future<void> clearAuth({required String tokenKey}) async {
-    await BearerStrategy.clearToken(key: tokenKey);
-    ApiClient.reset();
-  }
-
-  /// Full reset — cache + auth + cookies. Call on logout.
-  static Future<void> logout({required String tokenKey}) async {
-    await clearCache();
-    await clearAuth(tokenKey: tokenKey);
-    await CookieManager.clearAll();
-  }
+  static Future<void> clearCache() => connection.clearAllCache();
+  static Future<void> clearSessionCache(String sessionId) =>
+      connection.clearSessionCache(sessionId);
+  static Future<void> logout() => connection.logout();
 }

@@ -1,303 +1,345 @@
-// lib/server/api/api_cache.dart
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
-const _kHiveBox = 'server_cache';
-const _kCacheKeyPrefix = 'cache_v1';
-const _kMaxHiveKeyLength = 240;
+import '../config/api_bridge_config.dart';
 
-class _MemoryEntry {
-  _MemoryEntry({
-    required this.originalKey,
+enum ApiCacheSource { memory, hive }
+
+class ApiCacheRead {
+  const ApiCacheRead({
     required this.data,
+    required this.source,
+    required this.isStale,
+    required this.storedAt,
     required this.expiresAt,
   });
 
-  final String originalKey;
   final dynamic data;
+  final ApiCacheSource source;
+  final bool isStale;
+  final DateTime storedAt;
   final DateTime expiresAt;
-
-  bool get isExpired => DateTime.now().isAfter(expiresAt);
 }
 
-class _HiveEntry {
-  _HiveEntry({
+class _CacheEntry {
+  _CacheEntry({
     required this.originalKey,
+    required this.sessionHash,
     required this.data,
+    required this.tags,
+    required this.storedAtMs,
     required this.expiresAtMs,
+    required this.lastAccessedAtMs,
   });
 
   final String originalKey;
+  final String sessionHash;
   final dynamic data;
+  final List<String> tags;
+  final int storedAtMs;
   final int expiresAtMs;
+  int lastAccessedAtMs;
 
-  bool get isExpired => DateTime.now().millisecondsSinceEpoch > expiresAtMs;
+  bool get isStale => DateTime.now().millisecondsSinceEpoch > expiresAtMs;
 
-  Map<String, dynamic> toMap() => {
+  Map<String, dynamic> toMap() => <String, dynamic>{
         'originalKey': originalKey,
+        'sessionHash': sessionHash,
         'data': ApiCache._normalizeForHive(data),
+        'tags': tags,
+        'storedAtMs': storedAtMs,
         'expiresAtMs': expiresAtMs,
+        'lastAccessedAtMs': lastAccessedAtMs,
       };
 
-  static _HiveEntry? fromMap(dynamic value) {
+  static _CacheEntry? fromMap(dynamic value) {
     if (value is! Map) return null;
-
+    final originalKey = value['originalKey']?.toString();
+    final sessionHash = value['sessionHash']?.toString();
+    final storedAtMs = value['storedAtMs'];
     final expiresAtMs = value['expiresAtMs'];
-
-    if (expiresAtMs is! int) return null;
-
-    final originalKey = value['originalKey']?.toString() ?? '';
-
-    return _HiveEntry(
+    final lastAccessedAtMs = value['lastAccessedAtMs'];
+    if (originalKey == null ||
+        sessionHash == null ||
+        storedAtMs is! int ||
+        expiresAtMs is! int ||
+        lastAccessedAtMs is! int) {
+      return null;
+    }
+    return _CacheEntry(
       originalKey: originalKey,
+      sessionHash: sessionHash,
       data: ApiCache._normalizeFromHive(value['data']),
+      tags: value['tags'] is Iterable
+          ? (value['tags'] as Iterable)
+              .map((item) => item.toString())
+              .toList(growable: false)
+          : const <String>[],
+      storedAtMs: storedAtMs,
       expiresAtMs: expiresAtMs,
+      lastAccessedAtMs: lastAccessedAtMs,
     );
   }
 }
 
-/// Two-level cache for GET responses.
-///
-/// - L1 memory: instant reads, cleared on app restart.
-/// - L2 Hive: persistent across restarts.
-///
-/// Hive has a key limit, so raw request cache keys are converted into
-/// deterministic short keys:
-///
-/// same raw key -> same safe key
+/// Connection-scoped, session-partitioned L1 memory + L2 Hive cache.
 class ApiCache {
-  ApiCache._();
+  ApiCache._({
+    required this.connectionKey,
+    required this.config,
+    required Box<dynamic> box,
+  }) : _box = box;
 
-  static final Map<String, _MemoryEntry> _memory = {};
+  final String connectionKey;
+  final ApiCacheConfig config;
+  final Box<dynamic> _box;
+  final Map<String, _CacheEntry> _memory = <String, _CacheEntry>{};
 
-  static Box? _box;
+  String _activeSessionId = 'anonymous';
+  String _activeSessionHash = _hash('anonymous');
 
-  /// Internal — called by [Server.init].
-  static Future<void> init() async {
-    _box = await Hive.openBox(_kHiveBox);
+  String get activeSessionId => _activeSessionId;
+
+  static Future<ApiCache> create({
+    required String connectionKey,
+    required Uri baseUri,
+    required ApiCacheConfig config,
+  }) async {
+    final connectionHash = _hash(
+      '$connectionKey|${baseUri.scheme}://${baseUri.authority}',
+    ).substring(0, 24);
+    final box = await Hive.openBox<dynamic>('fab_cache_$connectionHash');
+    return ApiCache._(
+      connectionKey: connectionKey,
+      config: config,
+      box: box,
+    );
   }
 
-  // ── Read ───────────────────────────────────────────────────────────────────
-
-  /// Returns cached data for [key] or null on miss/expiry.
-  static dynamic read(String key) {
-    final safeKey = _safeKey(key);
-
-    // L1
-    final mem = _memory[safeKey];
-
-    if (mem != null) {
-      if (!mem.isExpired) return mem.data;
-
-      _memory.remove(safeKey);
+  Future<void> startSession({
+    required String sessionId,
+    Map<String, Object?> metadata = const <String, Object?>{},
+    bool? clearPreviousOnChange,
+  }) async {
+    final clean = sessionId.trim();
+    if (clean.isEmpty) {
+      throw ArgumentError.value(sessionId, 'sessionId', 'Cannot be empty.');
     }
-
-    // L2
-    final raw = _box?.get(safeKey);
-    final entry = _HiveEntry.fromMap(raw);
-
-    if (entry != null) {
-      if (!entry.isExpired) {
-        _memory[safeKey] = _MemoryEntry(
-          originalKey: entry.originalKey,
-          data: entry.data,
-          expiresAt: DateTime.fromMillisecondsSinceEpoch(entry.expiresAtMs),
-        );
-
-        return entry.data;
-      }
-
-      _box?.delete(safeKey);
+    final previousId = _activeSessionId;
+    final previousHash = _activeSessionHash;
+    final nextHash = _hash(clean);
+    final changed = previousHash != nextHash;
+    if (changed &&
+        (clearPreviousOnChange ?? config.clearPreviousSessionOnChange)) {
+      await _clearSessionHash(previousHash);
     }
-
-    return null;
+    _activeSessionId = clean;
+    _activeSessionHash = nextHash;
+    if (metadata.isNotEmpty) {
+      await _box.put(
+        '__session__:$nextHash',
+        <String, dynamic>{
+          'sessionHash': nextHash,
+          'metadata': _normalizeForHive(metadata),
+          'updatedAtMs': DateTime.now().millisecondsSinceEpoch,
+          if (previousId != clean) 'previousSessionChanged': true,
+        },
+      );
+    }
   }
 
-  // ── Write ──────────────────────────────────────────────────────────────────
+  String keyFor({
+    required String method,
+    required String path,
+    String query = '',
+    Map<String, String> varyHeaders = const <String, String>{},
+    String? operationId,
+  }) {
+    final headers = varyHeaders.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final raw = <String>[
+      method.toUpperCase(),
+      path,
+      query,
+      if (operationId != null) operationId,
+      for (final entry in headers) '${entry.key.toLowerCase()}:${entry.value}',
+    ].join('|');
+    return raw;
+  }
 
-  /// Store [data] under [key] with the given [ttl].
-  static Future<void> write(String key, dynamic data, Duration ttl) async {
-    final safeKey = _safeKey(key);
-    final expiresAt = DateTime.now().add(ttl);
+  String _storageKey(String originalKey, [String? sessionHash]) =>
+      'entry:${sessionHash ?? _activeSessionHash}:${_hash(originalKey)}';
 
-    // L1
-    _memory[safeKey] = _MemoryEntry(
-      originalKey: key,
+  Future<ApiCacheRead?> read(
+    String originalKey, {
+    bool allowStale = false,
+  }) async {
+    if (!config.enabled) return null;
+    final key = _storageKey(originalKey);
+    var entry = _memory[key];
+    var source = ApiCacheSource.memory;
+    if (entry == null) {
+      entry = _CacheEntry.fromMap(_box.get(key));
+      source = ApiCacheSource.hive;
+      if (entry != null) _memory[key] = entry;
+    }
+    if (entry == null) return null;
+    if (entry.sessionHash != _activeSessionHash) return null;
+    if (entry.isStale && !allowStale) return null;
+    entry.lastAccessedAtMs = DateTime.now().millisecondsSinceEpoch;
+    if (source == ApiCacheSource.hive) {
+      await _box.put(key, entry.toMap());
+    }
+    return ApiCacheRead(
+      data: entry.data,
+      source: source,
+      isStale: entry.isStale,
+      storedAt: DateTime.fromMillisecondsSinceEpoch(entry.storedAtMs),
+      expiresAt: DateTime.fromMillisecondsSinceEpoch(entry.expiresAtMs),
+    );
+  }
+
+  Future<void> write(
+    String originalKey,
+    dynamic data, {
+    required Duration ttl,
+    Iterable<String> tags = const <String>[],
+  }) async {
+    if (!config.enabled) return;
+    final now = DateTime.now();
+    final cleanTags = tags
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final entry = _CacheEntry(
+      originalKey: originalKey,
+      sessionHash: _activeSessionHash,
       data: data,
-      expiresAt: expiresAt,
+      tags: cleanTags,
+      storedAtMs: now.millisecondsSinceEpoch,
+      expiresAtMs: now.add(ttl).millisecondsSinceEpoch,
+      lastAccessedAtMs: now.millisecondsSinceEpoch,
     );
+    final key = _storageKey(originalKey);
+    _memory[key] = entry;
+    await _box.put(key, entry.toMap());
+    await _evictIfNeeded();
+  }
 
-    // L2
-    await _box?.put(
-      safeKey,
-      _HiveEntry(
-        originalKey: key,
-        data: data,
-        expiresAtMs: expiresAt.millisecondsSinceEpoch,
-      ).toMap(),
+  Future<void> invalidate(String originalKey) async {
+    final key = _storageKey(originalKey);
+    _memory.remove(key);
+    await _box.delete(key);
+  }
+
+  Future<void> invalidateWhere(String pattern) async {
+    final clean = pattern.trim();
+    if (clean.isEmpty) return;
+    await _deleteMatching(
+      (entry) =>
+          entry.sessionHash == _activeSessionHash &&
+          entry.originalKey.contains(clean),
     );
   }
 
-  // ── Invalidation ───────────────────────────────────────────────────────────
-
-  /// Remove a single cache entry by exact original [key].
-  static Future<void> invalidate(String key) async {
-    final safeKey = _safeKey(key);
-
-    _memory.remove(safeKey);
-    await _box?.delete(safeKey);
+  Future<void> invalidateTags(Iterable<String> tags) async {
+    final expected =
+        tags.map((tag) => tag.trim()).where((tag) => tag.isNotEmpty).toSet();
+    if (expected.isEmpty) return;
+    await _deleteMatching(
+      (entry) =>
+          entry.sessionHash == _activeSessionHash &&
+          entry.tags.any(expected.contains),
+    );
   }
 
-  /// Remove all entries whose original key contains [pattern].
-  /// Useful for invalidating a whole endpoint family e.g. `/v1/brands`.
-  static Future<void> invalidateWhere(String pattern) async {
-    final memKeys =
-        _memory.entries.where((entry) => entry.value.originalKey.contains(pattern)).map((entry) => entry.key).toList();
+  Future<void> clearActiveSession() => _clearSessionHash(_activeSessionHash);
 
-    for (final key in memKeys) {
+  Future<void> clearSession(String sessionId) =>
+      _clearSessionHash(_hash(sessionId.trim()));
+
+  Future<void> clearAll() async {
+    _memory.clear();
+    await _box.clear();
+  }
+
+  Future<void> _clearSessionHash(String sessionHash) async {
+    await _deleteMatching((entry) => entry.sessionHash == sessionHash);
+    await _box.delete('__session__:$sessionHash');
+  }
+
+  Future<void> _deleteMatching(bool Function(_CacheEntry entry) matches) async {
+    final keys = _box.keys.toList(growable: false);
+    for (final key in keys) {
+      if (key is! String || !key.startsWith('entry:')) continue;
+      final entry = _CacheEntry.fromMap(_box.get(key));
+      if (entry == null || !matches(entry)) continue;
       _memory.remove(key);
+      await _box.delete(key);
     }
+  }
 
-    final box = _box;
-    if (box == null) return;
-
-    final hiveKeys = box.keys.toList();
-
-    for (final hiveKey in hiveKeys) {
-      final raw = box.get(hiveKey);
-      final entry = _HiveEntry.fromMap(raw);
-
-      if (entry == null) continue;
-
-      if (entry.originalKey.contains(pattern)) {
-        await box.delete(hiveKey);
+  Future<void> _evictIfNeeded() async {
+    if (config.maxEntries <= 0) return;
+    final entries = <MapEntry<dynamic, _CacheEntry>>[];
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith('entry:')) continue;
+      final entry = _CacheEntry.fromMap(_box.get(key));
+      if (entry != null) {
+        entries.add(MapEntry<dynamic, _CacheEntry>(key, entry));
       }
     }
-  }
-
-  /// Clear everything — both L1 and L2.
-  static Future<void> clearAll() async {
-    _memory.clear();
-    await _box?.clear();
-  }
-
-  // ── Key safety ─────────────────────────────────────────────────────────────
-
-  static String _safeKey(String key) {
-    final raw = key.trim();
-
-    if (raw.isEmpty) {
-      return '$_kCacheKeyPrefix:empty';
+    final overflow = entries.length - config.maxEntries;
+    if (overflow <= 0) return;
+    entries.sort(
+      (a, b) => a.value.lastAccessedAtMs.compareTo(b.value.lastAccessedAtMs),
+    );
+    for (final item in entries.take(overflow)) {
+      _memory.remove(item.key);
+      await _box.delete(item.key);
     }
-
-    final hash = _fnv1a64(raw);
-    final readable = _readablePart(raw);
-
-    final candidate = '$_kCacheKeyPrefix:$hash:$readable';
-
-    if (candidate.length <= _kMaxHiveKeyLength) {
-      return candidate;
-    }
-
-    return '$_kCacheKeyPrefix:$hash';
   }
 
-  static String _readablePart(String key) {
-    final safe = key.replaceAll(RegExp(r'[^a-zA-Z0-9._~/-]+'), '_').replaceAll(RegExp(r'_+'), '_');
-
-    if (safe.length <= 100) return safe;
-
-    return safe.substring(0, 100);
-  }
-
-  /// Deterministic 64-bit FNV-1a hash.
-  ///
-  /// Same input string always produces the same output.
-  static String _fnv1a64(String input) {
-    const int fnvPrime = 0x100000001b3;
-    const int fnvOffset = 0xcbf29ce484222325;
-    const int mask64 = 0xffffffffffffffff;
-
-    var hash = fnvOffset;
-
-    for (final byte in utf8.encode(input)) {
-      hash ^= byte;
-      hash = (hash * fnvPrime) & mask64;
-    }
-
-    return hash.toRadixString(16).padLeft(16, '0');
-  }
-
-  // ── Hive value safety ──────────────────────────────────────────────────────
+  static String _hash(String value) =>
+      sha256.convert(utf8.encode(value)).toString();
 
   static dynamic _normalizeForHive(dynamic value) {
-    if (value == null) return null;
-
-    if (value is String || value is num || value is bool) {
+    if (value == null || value is String || value is num || value is bool) {
       return value;
     }
-
-    if (value is DateTime) {
-      return value.toIso8601String();
-    }
-
-    if (value is Enum) {
-      return _enumWireValue(value);
-    }
-
+    if (value is DateTime) return value.toIso8601String();
+    if (value is Enum) return value.name;
     if (value is Map) {
-      final output = <String, dynamic>{};
-
-      for (final entry in value.entries) {
-        final key = entry.key?.toString();
-
-        if (key == null || key.isEmpty) continue;
-
-        output[key] = _normalizeForHive(entry.value);
-      }
-
-      return output;
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          entry.key.toString(): _normalizeForHive(entry.value),
+      };
     }
-
     if (value is Iterable) {
-      return value.map(_normalizeForHive).toList();
+      return value.map(_normalizeForHive).toList(growable: false);
     }
-
     try {
-      final json = value.toJson();
-      return _normalizeForHive(json);
+      return _normalizeForHive(value.toJson());
     } catch (_) {
-      return value.toString();
+      throw ArgumentError(
+        'Cache values must be JSON/Hive compatible. Unsupported: '
+        '${value.runtimeType}',
+      );
     }
   }
 
   static dynamic _normalizeFromHive(dynamic value) {
-    if (value is Map<String, dynamic>) {
-      return value.map(
-        (key, val) => MapEntry(key, _normalizeFromHive(val)),
-      );
-    }
-
     if (value is Map) {
       return value.map(
-        (key, val) => MapEntry(key.toString(), _normalizeFromHive(val)),
+        (key, item) => MapEntry(key.toString(), _normalizeFromHive(item)),
       );
     }
-
     if (value is List) {
-      return value.map(_normalizeFromHive).toList();
+      return value.map(_normalizeFromHive).toList(growable: false);
     }
-
     return value;
-  }
-
-  static String _enumWireValue(Enum value) {
-    final raw = value.toString();
-    final dotIndex = raw.indexOf('.');
-
-    if (dotIndex < 0) return raw;
-
-    return raw.substring(dotIndex + 1);
   }
 }
