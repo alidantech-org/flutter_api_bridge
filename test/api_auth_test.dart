@@ -47,7 +47,8 @@ void main() {
       await restored.dispose();
     });
 
-    test('expired state survives restart until the session is renewed', () async {
+    test('expired state survives restart until the session is renewed',
+        () async {
       final storage = _MemoryCredentialStorage();
       final context = AuthStrategyContext(
         connectionKey: 'expired-test',
