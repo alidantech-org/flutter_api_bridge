@@ -1,6 +1,6 @@
 name: flutter_api_bridge
 description: Production transport runtime for generated Dart and Flutter API clients with persistent cookies, secure auth, retries, logging, and session-scoped Hive caching.
-version: 0.2.0-alpha.2
+version: 0.2.0
 repository: https://github.com/alidantech-org/flutter_api_bridge
 issue_tracker: https://github.com/alidantech-org/flutter_api_bridge/issues
 
