@@ -1,12 +1,10 @@
-// lib/server/api/api_request.dart
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 
 import 'api_normalizer.dart';
 import 'api_request_options.dart';
 
-// ─── Upload file descriptor ────────────────────────────────────────────────────
-
-/// Describes a single file to be uploaded.
 class UploadFile {
   const UploadFile.fromPath({
     required this.field,
@@ -38,9 +36,9 @@ class UploadFile {
   final String? path;
   final List<int>? bytes;
   final Stream<List<int>>? stream;
+  final int? _length;
 
   int get length => _length ?? 0;
-  final int? _length;
 
   Future<MapEntry<String, MultipartFile>> toMultipart() async {
     if (path != null) {
@@ -49,14 +47,12 @@ class UploadFile {
         await MultipartFile.fromFile(path!, filename: filename),
       );
     }
-
     if (bytes != null) {
       return MapEntry(
         field,
         MultipartFile.fromBytes(bytes!, filename: filename),
       );
     }
-
     if (stream != null) {
       return MapEntry(
         field,
@@ -67,17 +63,14 @@ class UploadFile {
         ),
       );
     }
-
     throw StateError('UploadFile has no source: path, bytes, or stream.');
   }
 }
 
-// ─── Request types ─────────────────────────────────────────────────────────────
-
 sealed class ApiRequest<T> {
   const ApiRequest({
     required this.endpoint,
-    required this.version,
+    this.version = '',
     this.fromJson,
     this.query,
     this.options,
@@ -91,17 +84,16 @@ sealed class ApiRequest<T> {
 
   bool get noAuth => options?.noAuth ?? false;
   Map<String, String>? get headers => options?.headers;
-
+  Map<String, String>? get cookies => options?.cookies;
+  String? get operationId => options?.operationId;
   String get fullPath => '$version$endpoint';
 }
-
-// ── GET ────────────────────────────────────────────────────────────────────────
 
 class GetRequest<T> extends ApiRequest<T> {
   const GetRequest({
     required super.endpoint,
     super.fromJson,
-    super.version = '',
+    super.version,
     super.query,
     ApiGetRequestOptions? options,
   })  : getOptions = options,
@@ -116,22 +108,16 @@ class GetRequest<T> extends ApiRequest<T> {
 
   String get cacheKey {
     final queryString = stableQueryString(query);
-
-    if (queryString.isEmpty) {
-      return '$version$endpoint';
-    }
-
-    return '$version$endpoint?$queryString';
+    if (queryString.isEmpty) return fullPath;
+    return '$fullPath?$queryString';
   }
 }
-
-// ── POST ───────────────────────────────────────────────────────────────────────
 
 class PostRequest<T> extends ApiRequest<T> {
   const PostRequest({
     required super.endpoint,
     super.fromJson,
-    super.version = '',
+    super.version,
     super.query,
     super.options,
     this.body,
@@ -139,14 +125,12 @@ class PostRequest<T> extends ApiRequest<T> {
 
   final Object? body;
 }
-
-// ── PUT ────────────────────────────────────────────────────────────────────────
 
 class PutRequest<T> extends ApiRequest<T> {
   const PutRequest({
     required super.endpoint,
     super.fromJson,
-    super.version = '',
+    super.version,
     super.query,
     super.options,
     this.body,
@@ -154,14 +138,12 @@ class PutRequest<T> extends ApiRequest<T> {
 
   final Object? body;
 }
-
-// ── PATCH ──────────────────────────────────────────────────────────────────────
 
 class PatchRequest<T> extends ApiRequest<T> {
   const PatchRequest({
     required super.endpoint,
     super.fromJson,
-    super.version = '',
+    super.version,
     super.query,
     super.options,
     this.body,
@@ -169,14 +151,12 @@ class PatchRequest<T> extends ApiRequest<T> {
 
   final Object? body;
 }
-
-// ── DELETE ─────────────────────────────────────────────────────────────────────
 
 class DeleteRequest<T> extends ApiRequest<T> {
   const DeleteRequest({
     required super.endpoint,
     super.fromJson,
-    super.version = '',
+    super.version,
     super.query,
     super.options,
     this.body,
@@ -184,24 +164,24 @@ class DeleteRequest<T> extends ApiRequest<T> {
 
   final Object? body;
 }
-
-// ── UPLOAD ────────────────────────────────────────────────────────────────────
 
 class UploadRequest<T> extends ApiRequest<T> {
   const UploadRequest({
     required super.endpoint,
     super.fromJson,
     required this.files,
-    super.version = '',
+    super.version,
     super.query,
-    super.options,
+    ApiUploadRequestOptions? options,
     this.fields,
     this.method = UploadMethod.post,
-  });
+  })  : uploadOptions = options,
+        super(options: options);
 
   final List<UploadFile> files;
   final Map<String, String>? fields;
   final UploadMethod method;
+  final ApiUploadRequestOptions? uploadOptions;
 }
 
 enum UploadMethod { post, put, patch }
