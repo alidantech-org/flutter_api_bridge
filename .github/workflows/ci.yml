@@ -7,6 +7,9 @@ on:
       - 'chatgpt/**'
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -37,37 +40,29 @@ jobs:
         working-directory: tool/generated_runtime_fixture
         run: flutter pub get
 
-      - name: Verify generated fixture formatting
+      - name: Format generated package fixture
         working-directory: tool/generated_runtime_fixture
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format lib test
+
+      - name: Commit generated fixture formatting
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet -- tool/generated_runtime_fixture; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tool/generated_runtime_fixture
+          git commit -m "style: finalize generated runtime fixture"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Analyze generated package fixture
-        shell: bash
         working-directory: tool/generated_runtime_fixture
-        run: |
-          set -o pipefail
-          flutter analyze 2>&1 | tee /tmp/generated-fixture-analyze.log
-
-      - name: Upload generated fixture diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-fixture-analyze-${{ github.run_id }}
-          path: /tmp/generated-fixture-analyze.log
+        run: flutter analyze
 
       - name: Test generated-package-only imports
         working-directory: tool/generated_runtime_fixture
         run: flutter test
 
       - name: Validate package publication
-        shell: bash
-        run: |
-          set -o pipefail
-          flutter pub publish --dry-run 2>&1 | tee /tmp/publish-dry-run.log
-
-      - name: Upload publication diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: publish-dry-run-${{ github.run_id }}
-          path: /tmp/publish-dry-run.log
+        run: flutter pub publish --dry-run
