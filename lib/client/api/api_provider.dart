@@ -1,8 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../server.dart';
-import 'api_request.dart';
-import 'api_result.dart';
 
 final apiProvider =
     StateNotifierProvider<ApiNotifier, AsyncValue<ApiResult<dynamic>>>(
