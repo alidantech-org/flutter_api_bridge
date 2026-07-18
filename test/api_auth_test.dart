@@ -46,6 +46,63 @@ void main() {
       );
       await restored.dispose();
     });
+
+    test('expired state survives restart until the session is renewed', () async {
+      final storage = _MemoryCredentialStorage();
+      final context = AuthStrategyContext(
+        connectionKey: 'expired-test',
+        storageNamespace: 'expired-runtime',
+        cookies: ApiCookieManager.memory(
+          baseUri: Uri.parse('https://api.example.com'),
+        ),
+        secureStorage: storage,
+      );
+
+      final first = ApiAuth(
+        strategy: const NoAuthStrategy(),
+        context: context,
+      );
+      await first.initialize();
+      await first.initializeUserSession(
+        sessionId: 'user-42',
+        authHeaders: const <String, String>{
+          'Authorization': 'Custom credential',
+        },
+      );
+      await first.expire(reason: 'http_401');
+      await first.dispose();
+
+      final restored = ApiAuth(
+        strategy: const NoAuthStrategy(),
+        context: context,
+      );
+      final expired = await restored.initialize();
+
+      expect(expired.status, AuthSessionStatus.expired);
+      expect(expired.sessionId, 'user-42');
+      expect(expired.reason, 'http_401');
+
+      await restored.initializeUserSession(
+        sessionId: 'user-42',
+        authHeaders: const <String, String>{
+          'Authorization': 'Replacement credential',
+        },
+      );
+      expect(restored.current.status, AuthSessionStatus.authenticated);
+      await restored.dispose();
+
+      final renewed = ApiAuth(
+        strategy: const NoAuthStrategy(),
+        context: context,
+      );
+      final renewedSession = await renewed.initialize();
+      expect(renewedSession.status, AuthSessionStatus.authenticated);
+      expect(
+        renewed.sessionHeaders['Authorization'],
+        'Replacement credential',
+      );
+      await renewed.dispose();
+    });
   });
 
   group('session cache isolation', () {
