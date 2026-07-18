@@ -293,22 +293,26 @@ class ApiAuth {
     }
     _current = next;
     _changes.add(next);
-    if (_logging.enabled) {
+    final options = _logging.resolve();
+    final importantFailure = next.status == AuthSessionStatus.expired;
+    if (!options.enabled ||
+        options.level == ApiLoggingLevel.errors && !importantFailure) {
+      return;
+    }
+    try {
       _logger.log(
-        ApiLogEvent(
-          level: next.status == AuthSessionStatus.expired
-              ? ApiLogLevel.warning
-              : ApiLogLevel.info,
-          type: ApiLogEventType.auth,
-          message: 'Authentication state changed',
+        ApiAuthLogEvent(
+          level: importantFailure ? ApiLogLevel.warning : ApiLogLevel.info,
           timestamp: next.changedAt,
+          options: options,
           data: <String, Object?>{
             'status': next.status.name,
-            if (next.sessionId != null) 'sessionId': next.sessionId,
             if (next.reason != null) 'reason': next.reason,
           },
         ),
       );
+    } catch (_) {
+      // Diagnostics must never affect authentication state changes.
     }
   }
 }

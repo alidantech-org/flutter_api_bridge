@@ -40,6 +40,7 @@ class UploadNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
       idempotencyKey: original?.idempotencyKey,
       cancelToken: _cancelToken,
       operationId: original?.operationId,
+      log: original?.log,
       invalidateCacheTags: original?.invalidateCacheTags ?? const <String>[],
       invalidateCachePaths: original?.invalidateCachePaths ?? const <String>[],
       clearActiveSessionCache: original?.clearActiveSessionCache ?? false,

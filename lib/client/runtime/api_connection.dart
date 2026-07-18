@@ -24,9 +24,7 @@ class ApiConnection {
     required this.auth,
     required this.cache,
     required this.cookies,
-    required ApiClientIdentity? identity,
-  })  : _dio = dio,
-        _identity = identity;
+  }) : _dio = dio;
 
   final String key;
   final ApiBridgeConfig config;
@@ -34,7 +32,6 @@ class ApiConnection {
   final ApiAuth auth;
   final ApiCache cache;
   final ApiCookieManager cookies;
-  final ApiClientIdentity? _identity;
 
   /// Escape hatch for legacy integrations. Generated packages should use
   /// [execute] so caching, retries, diagnostics, and invalidation remain active.
@@ -110,7 +107,6 @@ class ApiConnection {
       auth: auth,
       cache: cache,
       cookies: cookieManager,
-      identity: identity,
     );
     final restored = await auth.initialize();
     await cache.startSession(
@@ -157,11 +153,20 @@ class ApiConnection {
 
   Future<ApiResult<T>> execute<T>(ApiRequest<T> request) async {
     _ensureActive();
-    if (request is GetRequest<T>) return _executeGet(request);
-    return _executeMutation(request);
+    final context = _ExecutionLogContext(
+      requestId: _nextRequestId(),
+      startedAt: DateTime.now().toUtc(),
+      options: config.logging.resolve(request.options?.log),
+    );
+    _logRequest(request, context);
+    if (request is GetRequest<T>) return _executeGet(request, context);
+    return _executeMutation(request, context);
   }
 
-  Future<ApiResult<T>> _executeGet<T>(GetRequest<T> request) async {
+  Future<ApiResult<T>> _executeGet<T>(
+    GetRequest<T> request,
+    _ExecutionLogContext context,
+  ) async {
     final options = request.getOptions;
     final policy = !request.cache || !config.cache.enabled
         ? ApiCachePolicy.disabled
@@ -180,15 +185,29 @@ class ApiConnection {
         allowStale: policy == ApiCachePolicy.cacheOnly,
       );
       if (cached != null) {
-        return _parse<T>(
+        final result = _parse<T>(
           request: request,
           responseBody: cached.data,
           statusCode: 200,
           meta: _cacheMetadata(request, cached),
         );
+        _logResponse(
+          request,
+          context,
+          statusCode: 200,
+          source: 'cache',
+          data: <String, Object?>{
+            'cache': 'hit',
+            'age':
+                '${DateTime.now().toUtc().difference(cached.storedAt).inSeconds}s',
+            'cacheSource': cached.source.name,
+            if (context.options.responseBody) 'body': cached.data,
+          },
+        );
+        return result;
       }
       if (policy == ApiCachePolicy.cacheOnly) {
-        return ApiError<T>(
+        final result = ApiError<T>(
           message: 'No cached data is available',
           error: 'cache_miss',
           meta: ApiResultMetadata(
@@ -196,10 +215,17 @@ class ApiConnection {
             operationId: request.operationId,
           ),
         );
+        _logError(
+          request,
+          context,
+          code: 'cache_miss',
+          message: result.message,
+        );
+        return result;
       }
     }
 
-    final network = await _network<T>(request);
+    final network = await _network<T>(request, context);
     if (network.result is ApiSuccess<T>) {
       if (policy != ApiCachePolicy.disabled) {
         final success = network.result as ApiSuccess<T>;
@@ -210,6 +236,7 @@ class ApiConnection {
           tags: options?.cacheTags ?? const <String>[],
         );
       }
+      _logNetworkSuccess(request, context, network);
       return network.result;
     }
 
@@ -223,17 +250,7 @@ class ApiConnection {
             config.cache.allowStaleOnNetworkError,
       );
       if (cached != null) {
-        _log(
-          ApiLogLevel.warning,
-          ApiLogEventType.cache,
-          'Using cached data after network failure',
-          request: request,
-          data: <String, Object?>{
-            'source': cached.source.name,
-            'stale': cached.isStale,
-          },
-        );
-        return _parse<T>(
+        final result = _parse<T>(
           request: request,
           responseBody: cached.data,
           statusCode: 200,
@@ -250,35 +267,50 @@ class ApiConnection {
             expiresAt: cached.expiresAt,
           ),
         );
+        _logResponse(
+          request,
+          context,
+          statusCode: 200,
+          source: 'cache',
+          data: <String, Object?>{
+            'cache': 'hit',
+            'fallback': 'network_failure',
+            'stale': cached.isStale,
+            'cacheSource': cached.source.name,
+            if (context.options.responseBody) 'body': cached.data,
+          },
+        );
+        return result;
       }
     }
+    _logNetworkError(request, context, network);
     return network.result;
   }
 
-  Future<ApiResult<T>> _executeMutation<T>(ApiRequest<T> request) async {
-    final network = await _network<T>(request);
+  Future<ApiResult<T>> _executeMutation<T>(
+    ApiRequest<T> request,
+    _ExecutionLogContext context,
+  ) async {
+    final network = await _network<T>(request, context);
     if (network.result is ApiSuccess<T>) {
       await _applyPostSuccessInvalidation(request.options);
+      _logNetworkSuccess(request, context, network);
+    } else {
+      _logNetworkError(request, context, network);
     }
     return network.result;
   }
 
-  Future<_NetworkResult<T>> _network<T>(ApiRequest<T> request) async {
-    final requestId = _nextRequestId();
+  Future<_NetworkResult<T>> _network<T>(
+    ApiRequest<T> request,
+    _ExecutionLogContext context,
+  ) async {
+    final requestId = context.requestId;
     final maxAttempts = _maxAttempts(request);
     DioException? lastException;
 
     for (var attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      final startedAt = DateTime.now().toUtc();
       try {
-        _log(
-          ApiLogLevel.debug,
-          ApiLogEventType.request,
-          'API request',
-          request: request,
-          requestId: requestId,
-          attempt: attempt,
-        );
         final response = await _send(request, requestId, attempt);
         final result = _parse<T>(
           request: request,
@@ -292,19 +324,11 @@ class ApiConnection {
             attempt: attempt,
           ),
         );
-        _log(
-          ApiLogLevel.info,
-          ApiLogEventType.response,
-          'API response',
-          request: request,
-          requestId: requestId,
-          statusCode: response.statusCode,
-          duration: DateTime.now().toUtc().difference(startedAt),
-          attempt: attempt,
-        );
         return _NetworkResult<T>(
           result: result,
           responseBody: response.data,
+          response: response,
+          attempt: attempt,
         );
       } on DioException catch (error) {
         lastException = error;
@@ -312,31 +336,18 @@ class ApiConnection {
           unawaited(auth.expire(reason: 'http_401'));
         }
         final canRetry = attempt < maxAttempts && _shouldRetry(request, error);
-        _log(
-          canRetry ? ApiLogLevel.warning : ApiLogLevel.error,
-          canRetry ? ApiLogEventType.retry : ApiLogEventType.failure,
-          canRetry ? 'API request will retry' : 'API request failed',
-          request: request,
-          requestId: requestId,
-          statusCode: error.response?.statusCode,
-          duration: DateTime.now().toUtc().difference(startedAt),
-          attempt: attempt,
-          error: error,
-          stackTrace: error.stackTrace,
-        );
         if (!canRetry) break;
-        await Future<void>.delayed(_retryDelay(error, attempt));
-      } catch (error, stackTrace) {
-        _log(
-          ApiLogLevel.error,
-          ApiLogEventType.failure,
-          'Unexpected API failure',
-          request: request,
-          requestId: requestId,
-          attempt: attempt,
-          error: error,
-          stackTrace: stackTrace,
+        final delay = _retryDelay(error, attempt);
+        _logRetry(
+          request,
+          context,
+          attempt: attempt + 1,
+          maxAttempts: maxAttempts,
+          delay: delay,
+          reason: _retryReason(error),
         );
+        await Future<void>.delayed(delay);
+      } catch (error, stackTrace) {
         return _NetworkResult<T>(
           result: ApiError<T>(
             message: 'An unexpected error occurred',
@@ -348,6 +359,9 @@ class ApiConnection {
               attempt: attempt,
             ),
           ),
+          unexpectedError: error,
+          stackTrace: stackTrace,
+          attempt: attempt,
         );
       }
     }
@@ -356,6 +370,8 @@ class ApiConnection {
     return _NetworkResult<T>(
       exception: lastException,
       responseBody: lastException?.response?.data,
+      response: lastException?.response,
+      attempt: maxAttempts,
       result: ApiError<T>(
         message: _extractMessage(
           raw,
@@ -466,15 +482,7 @@ class ApiConnection {
         raw: raw,
         meta: meta,
       );
-    } catch (error, stackTrace) {
-      _log(
-        ApiLogLevel.error,
-        ApiLogEventType.failure,
-        'Failed to parse API response',
-        request: request,
-        error: error,
-        stackTrace: stackTrace,
-      );
+    } catch (error) {
       return ApiError<T>(
         message: message.isEmpty ? 'Failed to parse response' : message,
         error: 'Failed to parse response: $error',
@@ -622,43 +630,231 @@ class ApiConnection {
     return error?.message ?? error?.type.name ?? 'request_failed';
   }
 
-  void _log(
-    ApiLogLevel level,
-    ApiLogEventType type,
-    String message, {
-    ApiRequest<dynamic>? request,
-    String? requestId,
+  void _logRequest<T>(ApiRequest<T> request, _ExecutionLogContext context) {
+    final data = <String, Object?>{
+      if (context.options.queryParameters && request.query != null)
+        'query': buildDioQueryParameters(request.query),
+      if (context.options.requestHeaders && request.headers?.isNotEmpty == true)
+        'headers': request.headers,
+      if (context.options.cookies && request.cookies?.isNotEmpty == true)
+        'cookies': request.cookies,
+      if (context.options.requestBody) 'body': _requestBodyForLog(request),
+    };
+    _emit(
+      ApiRequestLogEvent(
+        timestamp: context.startedAt,
+        method: _method(request),
+        path: request.fullPath,
+        operationId: request.operationId,
+        requestId: context.requestId,
+        attempt: 1,
+        maxAttempts: _maxAttempts(request),
+        options: context.options,
+        data: data,
+      ),
+    );
+  }
+
+  void _logNetworkSuccess<T>(
+    ApiRequest<T> request,
+    _ExecutionLogContext context,
+    _NetworkResult<T> network,
+  ) {
+    _logResponse(
+      request,
+      context,
+      statusCode: network.response?.statusCode ??
+          (network.result as ApiSuccess<T>).statusCode,
+      source: 'network',
+      attempt: network.attempt,
+      data: <String, Object?>{
+        if (context.options.responseHeaders && network.response != null)
+          'headers': network.response!.headers.map,
+        if (context.options.responseBody) 'body': network.responseBody,
+      },
+    );
+  }
+
+  void _logResponse<T>(
+    ApiRequest<T> request,
+    _ExecutionLogContext context, {
+    required int statusCode,
+    required String source,
+    int? attempt,
+    Map<String, Object?> data = const <String, Object?>{},
+  }) {
+    _emit(
+      ApiResponseLogEvent(
+        timestamp: DateTime.now().toUtc(),
+        method: _method(request),
+        path: request.fullPath,
+        operationId: request.operationId,
+        requestId: context.requestId,
+        statusCode: statusCode,
+        duration: DateTime.now().toUtc().difference(context.startedAt),
+        source: source,
+        attempt: attempt,
+        options: context.options,
+        data: data,
+      ),
+    );
+  }
+
+  void _logNetworkError<T>(
+    ApiRequest<T> request,
+    _ExecutionLogContext context,
+    _NetworkResult<T> network,
+  ) {
+    final errorResult =
+        network.result is ApiError<T> ? network.result as ApiError<T> : null;
+    final raw = asResponseMap(network.responseBody);
+    final message = errorResult?.message ??
+        _extractMessage(raw, fallback: 'Request failed');
+    final code = _errorCode(network.exception, raw, errorResult?.error);
+    _logError(
+      request,
+      context,
+      statusCode: errorResult?.statusCode ?? network.response?.statusCode,
+      attempt: network.attempt,
+      code: code,
+      message: message,
+      data: <String, Object?>{
+        if (context.options.responseHeaders && network.response != null)
+          'headers': network.response!.headers.map,
+        if (context.options.responseBody) 'body': network.responseBody,
+      },
+      error: network.unexpectedError ?? network.exception,
+      stackTrace: network.stackTrace ?? network.exception?.stackTrace,
+    );
+  }
+
+  void _logError<T>(
+    ApiRequest<T> request,
+    _ExecutionLogContext context, {
+    required String code,
+    required String message,
     int? statusCode,
-    Duration? duration,
     int? attempt,
     Map<String, Object?> data = const <String, Object?>{},
     Object? error,
     StackTrace? stackTrace,
   }) {
-    if (!config.logging.enabled) return;
-    config.logger.log(
-      ApiLogEvent(
-        level: level,
-        type: type,
-        message: message,
+    _emit(
+      ApiErrorLogEvent(
         timestamp: DateTime.now().toUtc(),
-        method: request == null ? null : _method(request),
-        path: request?.fullPath,
+        method: _method(request),
+        path: request.fullPath,
+        operationId: request.operationId,
+        requestId: context.requestId,
         statusCode: statusCode,
-        duration: duration,
-        requestId: requestId,
-        operationId: request?.operationId,
+        duration: DateTime.now().toUtc().difference(context.startedAt),
         attempt: attempt,
-        data: <String, Object?>{
-          'connection': key,
-          'sessionId': auth.current.sessionId,
-          if (_identity != null) 'client': _identity.applicationName,
-          ...data,
-        },
-        error: error,
-        stackTrace: stackTrace,
+        code: code,
+        options: context.options,
+        data: <String, Object?>{'message': message, ...data},
+        error: context.options.level == ApiLoggingLevel.detailed ? error : null,
+        stackTrace: context.options.level == ApiLoggingLevel.detailed
+            ? stackTrace
+            : null,
       ),
     );
+  }
+
+  void _logRetry<T>(
+    ApiRequest<T> request,
+    _ExecutionLogContext context, {
+    required int attempt,
+    required int maxAttempts,
+    required Duration delay,
+    required String reason,
+  }) {
+    _emit(
+      ApiRetryLogEvent(
+        timestamp: DateTime.now().toUtc(),
+        operationId: request.operationId,
+        requestId: context.requestId,
+        attempt: attempt,
+        maxAttempts: maxAttempts,
+        retryDelay: delay,
+        code: reason,
+        options: context.options,
+        data: <String, Object?>{'reason': reason},
+      ),
+    );
+  }
+
+  Object? _requestBodyForLog<T>(ApiRequest<T> request) {
+    if (request is UploadRequest<T>) {
+      return <String, Object?>{
+        'type': 'multipart',
+        'fields': request.fields,
+        'files': request.files
+            .map(
+              (file) => <String, Object?>{
+                'field': file.field,
+                'filename': file.filename,
+                'size': file.length,
+                'source': file.path != null
+                    ? 'path'
+                    : file.bytes != null
+                        ? 'bytes'
+                        : 'stream',
+              },
+            )
+            .toList(growable: false),
+      };
+    }
+    final body = switch (request) {
+      PostRequest<T> value => value.body,
+      PutRequest<T> value => value.body,
+      PatchRequest<T> value => value.body,
+      DeleteRequest<T> value => value.body,
+      _ => null,
+    };
+    if (body == null || body is String || body is num || body is bool) {
+      return body;
+    }
+    try {
+      return normalizeBody(body);
+    } catch (_) {
+      return body;
+    }
+  }
+
+  String _errorCode(
+    DioException? error,
+    Map<String, dynamic>? raw,
+    Object? resultError,
+  ) {
+    final code = raw?['code'];
+    if (code is String && code.trim().isNotEmpty) return code.trim();
+    final rawError = raw?['error'];
+    if (rawError is String && rawError.trim().isNotEmpty) {
+      return rawError.trim();
+    }
+    if (resultError is String && resultError.trim().isNotEmpty) {
+      return resultError.trim();
+    }
+    return error?.type.name ?? 'request_failed';
+  }
+
+  String _retryReason(DioException error) {
+    final raw = asResponseMap(error.response?.data);
+    return _errorCode(error, raw, null);
+  }
+
+  void _emit(ApiLogEvent event) {
+    final options = event.options ?? config.logging.resolve();
+    if (!options.enabled) return;
+    if (options.level == ApiLoggingLevel.errors &&
+        event.type != ApiLogEventType.failure) {
+      return;
+    }
+    try {
+      config.logger.log(event);
+    } catch (_) {
+      // Diagnostics must never affect request execution.
+    }
   }
 
   Future<void> dispose() async {
@@ -723,9 +919,29 @@ class _NetworkResult<T> {
     required this.result,
     this.responseBody,
     this.exception,
+    this.response,
+    this.unexpectedError,
+    this.stackTrace,
+    this.attempt,
   });
 
   final ApiResult<T> result;
   final dynamic responseBody;
   final DioException? exception;
+  final Response<dynamic>? response;
+  final Object? unexpectedError;
+  final StackTrace? stackTrace;
+  final int? attempt;
+}
+
+class _ExecutionLogContext {
+  const _ExecutionLogContext({
+    required this.requestId,
+    required this.startedAt,
+    required this.options,
+  });
+
+  final String requestId;
+  final DateTime startedAt;
+  final ApiResolvedLogOptions options;
 }
