@@ -17,7 +17,7 @@ dependencies:
   crypto: ^3.0.7
   flutter_secure_storage: ^10.3.1
   hive_flutter: ^1.1.0
-  flutter_riverpod: ^3.3.2
+  flutter_riverpod: ^2.5.1
   path_provider: ^2.1.4
 
 dev_dependencies:
@@ -25,4 +25,4 @@ dev_dependencies:
     sdk: flutter
   build_runner: ^2.4.13
   hive_generator: ^2.0.1
-  lints: ^6.1.0
+  lints: ^5.0.0
