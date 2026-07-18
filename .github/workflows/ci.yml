@@ -7,6 +7,9 @@ on:
       - 'chatgpt/**'
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -27,17 +30,39 @@ jobs:
       - name: Format sources
         run: dart format lib test
 
+      - name: Commit formatter output
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet -- lib test; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib test
+          git commit -m "style: apply dart formatter"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
       - name: Upload formatted sources
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: formatted-sources
+          name: formatted-sources-${{ github.run_id }}
           path: |
             lib
             test
 
       - name: Analyze package
-        run: flutter analyze
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee analyze.log
+
+      - name: Upload analyzer diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analyzer-diagnostics-${{ github.run_id }}
+          path: analyze.log
 
       - name: Run tests
         run: flutter test
