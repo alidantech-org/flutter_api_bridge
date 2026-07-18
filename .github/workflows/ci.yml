@@ -7,9 +7,6 @@ on:
       - 'chatgpt/**'
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -40,21 +37,9 @@ jobs:
         working-directory: tool/generated_runtime_fixture
         run: flutter pub get
 
-      - name: Format generated package fixture
+      - name: Verify generated fixture formatting
         working-directory: tool/generated_runtime_fixture
-        run: dart format lib test
-
-      - name: Commit generated fixture formatting
-        if: github.event_name == 'push'
-        run: |
-          if git diff --quiet -- tool/generated_runtime_fixture; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tool/generated_runtime_fixture
-          git commit -m "style: finalize generated runtime fixture"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+        run: dart format --output=none --set-exit-if-changed lib test
 
       - name: Analyze generated package fixture
         working-directory: tool/generated_runtime_fixture
