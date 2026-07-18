@@ -33,6 +33,22 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      - name: Resolve generated package fixture
+        working-directory: tool/generated_runtime_fixture
+        run: flutter pub get
+
+      - name: Verify generated fixture formatting
+        working-directory: tool/generated_runtime_fixture
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze generated package fixture
+        working-directory: tool/generated_runtime_fixture
+        run: flutter analyze
+
+      - name: Test generated-package-only imports
+        working-directory: tool/generated_runtime_fixture
+        run: flutter test
+
       - name: Validate package publication
         shell: bash
         run: |
