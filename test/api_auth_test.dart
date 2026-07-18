@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_api_bridge/flutter_api_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -104,6 +105,38 @@ void main() {
       );
       await renewed.dispose();
     });
+
+    test('concurrent unauthorized responses expire the session once', () async {
+      final strategy = _CountingUnauthorizedStrategy();
+      final auth = ApiAuth(
+        strategy: strategy,
+        context: AuthStrategyContext(
+          connectionKey: 'concurrent-401',
+          storageNamespace: 'concurrent-401',
+          cookies: ApiCookieManager.memory(
+            baseUri: Uri.parse('https://api.example.com'),
+          ),
+          secureStorage: _MemoryCredentialStorage(),
+        ),
+      );
+      await auth.initialize();
+      await auth.initializeUserSession(
+        sessionId: 'user-42',
+        authHeaders: const <String, String>{
+          'Authorization': 'Custom credential',
+        },
+      );
+
+      await Future.wait<void>(<Future<void>>[
+        auth.expire(reason: 'http_401'),
+        auth.expire(reason: 'http_401'),
+        auth.expire(reason: 'http_401'),
+      ]);
+
+      expect(strategy.unauthorizedCalls, 1);
+      expect(auth.current.status, AuthSessionStatus.expired);
+      await auth.dispose();
+    });
   });
 
   group('session cache isolation', () {
@@ -177,6 +210,22 @@ void main() {
       '[REDACTED]',
     );
   });
+}
+
+class _CountingUnauthorizedStrategy extends AuthStrategy {
+  int unauthorizedCalls = 0;
+
+  @override
+  Future<void> apply(
+    RequestOptions options,
+    AuthStrategyContext context,
+  ) async {}
+
+  @override
+  Future<void> onUnauthorized(AuthStrategyContext context) async {
+    unauthorizedCalls += 1;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }
 
 class _MemoryCredentialStorage implements ApiCredentialStorage {
