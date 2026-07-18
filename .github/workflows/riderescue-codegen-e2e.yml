@@ -1,0 +1,115 @@
+name: Riderescue Dart codegen E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chatgpt/production-transport-stack
+    paths:
+      - '.github/workflows/riderescue-codegen-e2e.yml'
+      - 'lib/**'
+      - 'pubspec.yaml'
+
+jobs:
+  generate-and-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out flutter_api_bridge
+        uses: actions/checkout@v4
+        with:
+          path: bridge
+
+      - name: Check out Riderescue backend codegen branch
+        uses: actions/checkout@v4
+        with:
+          repository: riderescue/riderescue_api
+          ref: chatgpt/flutter-api-bridge-runtime
+          path: backend
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: Enable repository pnpm version
+        working-directory: backend
+        run: corepack enable
+
+      - name: Install backend codegen dependencies
+        working-directory: backend
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Dart API package
+        working-directory: backend
+        run: pnpm openapi:generate
+
+      - name: Locate generated Dart package
+        id: generated
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t candidates < <(
+            find backend -type f -name pubspec.yaml \
+              -not -path '*/node_modules/*' \
+              -not -path '*/dev/validation/*' \
+              -print0 |
+            xargs -0 -r grep -l '^  flutter_api_bridge:'
+          )
+          if [ "${#candidates[@]}" -ne 1 ]; then
+            printf 'Expected exactly one generated Dart package, found %s\n' "${#candidates[@]}"
+            printf '%s\n' "${candidates[@]:-<none>}"
+            find backend -type f -name pubspec.yaml -not -path '*/node_modules/*' -print
+            exit 1
+          fi
+          package_dir="$(dirname "${candidates[0]}")"
+          echo "package_dir=$package_dir" >> "$GITHUB_OUTPUT"
+          echo "Generated package: $package_dir"
+
+      - name: Override unpublished bridge dependency for validation
+        shell: bash
+        run: |
+          cat >> "${{ steps.generated.outputs.package_dir }}/pubspec.yaml" <<EOF
+
+          dependency_overrides:
+            flutter_api_bridge:
+              path: $GITHUB_WORKSPACE/bridge
+          EOF
+
+      - name: Resolve generated Dart dependencies
+        working-directory: ${{ steps.generated.outputs.package_dir }}
+        run: flutter pub get
+
+      - name: Verify generated Dart formatting
+        working-directory: ${{ steps.generated.outputs.package_dir }}
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze generated Dart package
+        working-directory: ${{ steps.generated.outputs.package_dir }}
+        run: flutter analyze
+
+      - name: Test generated Dart package
+        working-directory: ${{ steps.generated.outputs.package_dir }}
+        shell: bash
+        run: |
+          if [ -d test ]; then
+            flutter test
+          else
+            echo 'No generated test directory; analysis is the compile validation.'
+          fi
+
+      - name: Upload generated package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: riderescue-generated-dart-${{ github.run_id }}
+          path: ${{ steps.generated.outputs.package_dir }}
+          if-no-files-found: warn
