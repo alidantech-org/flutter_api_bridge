@@ -1,5 +1,3 @@
-library generated_api;
-
 import 'package:flutter_api_bridge/flutter_api_bridge.dart';
 
 export 'package:flutter_api_bridge/flutter_api_bridge.dart'
@@ -29,7 +27,8 @@ export 'package:flutter_api_bridge/flutter_api_bridge.dart'
 
 /// Representative root facade emitted by a generated API package.
 class GeneratedApi {
-  GeneratedApi._(ApiConnection connection) : v1 = GeneratedV1Client(connection);
+  GeneratedApi._(ApiConnection connection)
+      : v1 = GeneratedV1Client(connection);
 
   static const String connectionKey = 'generated_api_fixture';
 
@@ -103,7 +102,8 @@ class GeneratedApi {
     _instance = null;
   }
 
-  static GeneratedApi get instance => _instance ??= GeneratedApi._(connection);
+  static GeneratedApi get instance =>
+      _instance ??= GeneratedApi._(connection);
 
   final GeneratedV1Client v1;
 }
