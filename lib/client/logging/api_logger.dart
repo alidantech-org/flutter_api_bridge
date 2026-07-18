@@ -377,7 +377,13 @@ class ApiLogFormatter {
     };
     final metadata = _metadata(event, safeData, options);
     if (metadata.isEmpty) return summary;
-    return '$summary\n${metadata.map((line) => '  ↳ $line').join('\n')}';
+    final compact = metadata.where((line) => !line.contains('\n')).toList();
+    final expanded = metadata.where((line) => line.contains('\n')).toList();
+    final lines = <String>[
+      if (compact.isNotEmpty) '  ↳ ${compact.join(' · ')}',
+      ...expanded.map((line) => '  ↳ $line'),
+    ];
+    return '$summary\n${lines.join('\n')}';
   }
 
   String _request(ApiLogEvent event) =>
@@ -443,7 +449,9 @@ class ApiLogFormatter {
     if (value is Map || value is Iterable) {
       try {
         if (options?.prettyPrintBodies == true) {
-          return const JsonEncoder.withIndent('  ').convert(value);
+          return const JsonEncoder.withIndent('  ')
+              .convert(value)
+              .replaceAll('\n', '\n    ');
         }
         return jsonEncode(value);
       } catch (_) {
