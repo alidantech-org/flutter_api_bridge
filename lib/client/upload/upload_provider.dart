@@ -40,12 +40,9 @@ class UploadNotifier extends StateNotifier<AsyncValue<ApiResult<dynamic>>> {
       idempotencyKey: original?.idempotencyKey,
       cancelToken: _cancelToken,
       operationId: original?.operationId,
-      invalidateCacheTags:
-          original?.invalidateCacheTags ?? const <String>[],
-      invalidateCachePaths:
-          original?.invalidateCachePaths ?? const <String>[],
-      clearActiveSessionCache:
-          original?.clearActiveSessionCache ?? false,
+      invalidateCacheTags: original?.invalidateCacheTags ?? const <String>[],
+      invalidateCachePaths: original?.invalidateCachePaths ?? const <String>[],
+      clearActiveSessionCache: original?.clearActiveSessionCache ?? false,
       onSendProgress: (sent, total) {
         _progressController.add(UploadProgress(sent: sent, total: total));
         original?.onSendProgress?.call(sent, total);

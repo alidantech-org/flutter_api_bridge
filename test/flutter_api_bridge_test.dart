@@ -147,7 +147,8 @@ void main() {
 
   group('session-partitioned Hive cache', () {
     Future<ApiCache> createCache(String suffix) => ApiCache.create(
-          connectionKey: 'cache-$suffix-${DateTime.now().microsecondsSinceEpoch}',
+          connectionKey:
+              'cache-$suffix-${DateTime.now().microsecondsSinceEpoch}',
           baseUri: Uri.parse('https://api.example.com'),
           config: const ApiCacheConfig(maxEntries: 20),
         );
@@ -231,7 +232,8 @@ void main() {
       final manager = ApiCookieManager.memory(
         baseUri: Uri.parse('https://api.example.com'),
       );
-      await manager.setValues(const <String, String>{'session': 'cookie-value'});
+      await manager
+          .setValues(const <String, String>{'session': 'cookie-value'});
       final context = AuthStrategyContext(
         connectionKey: 'cookies',
         storageNamespace: 'cookies',
