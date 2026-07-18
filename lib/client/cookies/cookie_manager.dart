@@ -19,8 +19,7 @@ class ApiCookieManager {
   final PersistCookieJar _jar;
 
   /// In-memory cookie jar for tests and non-persistent tooling.
-  factory ApiCookieManager.memory({required Uri baseUri}) =>
-      ApiCookieManager._(
+  factory ApiCookieManager.memory({required Uri baseUri}) => ApiCookieManager._(
         baseUri: baseUri,
         jar: PersistCookieJar(ignoreExpires: false),
       );
@@ -31,7 +30,8 @@ class ApiCookieManager {
   }) async {
     final root = await getApplicationSupportDirectory();
     final namespace = sha256
-        .convert('$connectionKey|${baseUri.scheme}://${baseUri.authority}'.codeUnits)
+        .convert(
+            '$connectionKey|${baseUri.scheme}://${baseUri.authority}'.codeUnits)
         .toString();
     final directory = Directory(
       '${root.path}${Platform.pathSeparator}flutter_api_bridge'
@@ -47,8 +47,7 @@ class ApiCookieManager {
 
   dio_cookie.CookieManager get interceptor => dio_cookie.CookieManager(_jar);
 
-  Future<List<Cookie>> all({Uri? uri}) =>
-      _jar.loadForRequest(uri ?? baseUri);
+  Future<List<Cookie>> all({Uri? uri}) => _jar.loadForRequest(uri ?? baseUri);
 
   Future<bool> hasAny({Uri? uri}) async {
     final cookies = await all(uri: uri);

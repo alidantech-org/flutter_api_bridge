@@ -49,15 +49,12 @@ class ApiRequestOptions {
         cookies: cookies ?? this.cookies,
         noAuth: noAuth ?? this.noAuth,
         retry: clearRetry ? null : retry ?? this.retry,
-        retryUnsafeRequest:
-            retryUnsafeRequest ?? this.retryUnsafeRequest,
+        retryUnsafeRequest: retryUnsafeRequest ?? this.retryUnsafeRequest,
         idempotencyKey: idempotencyKey ?? this.idempotencyKey,
         cancelToken: cancelToken ?? this.cancelToken,
         operationId: operationId ?? this.operationId,
-        invalidateCacheTags:
-            invalidateCacheTags ?? this.invalidateCacheTags,
-        invalidateCachePaths:
-            invalidateCachePaths ?? this.invalidateCachePaths,
+        invalidateCacheTags: invalidateCacheTags ?? this.invalidateCacheTags,
+        invalidateCachePaths: invalidateCachePaths ?? this.invalidateCachePaths,
         clearActiveSessionCache:
             clearActiveSessionCache ?? this.clearActiveSessionCache,
       );
@@ -125,20 +122,16 @@ class ApiGetRequestOptions extends ApiRequestOptions {
         cookies: cookies ?? this.cookies,
         noAuth: noAuth ?? this.noAuth,
         retry: clearRetry ? null : retry ?? this.retry,
-        retryUnsafeRequest:
-            retryUnsafeRequest ?? this.retryUnsafeRequest,
+        retryUnsafeRequest: retryUnsafeRequest ?? this.retryUnsafeRequest,
         idempotencyKey: idempotencyKey ?? this.idempotencyKey,
         cancelToken: cancelToken ?? this.cancelToken,
         operationId: operationId ?? this.operationId,
-        invalidateCacheTags:
-            invalidateCacheTags ?? this.invalidateCacheTags,
-        invalidateCachePaths:
-            invalidateCachePaths ?? this.invalidateCachePaths,
+        invalidateCacheTags: invalidateCacheTags ?? this.invalidateCacheTags,
+        invalidateCachePaths: invalidateCachePaths ?? this.invalidateCachePaths,
         clearActiveSessionCache:
             clearActiveSessionCache ?? this.clearActiveSessionCache,
         cache: cache ?? this.cache,
-        cachePolicy:
-            clearCachePolicy ? null : cachePolicy ?? this.cachePolicy,
+        cachePolicy: clearCachePolicy ? null : cachePolicy ?? this.cachePolicy,
         cacheTtl: clearCacheTtl ? null : cacheTtl ?? this.cacheTtl,
         forceRefresh: forceRefresh ?? this.forceRefresh,
         invalidateCache: invalidateCache ?? this.invalidateCache,
@@ -186,15 +179,12 @@ class ApiUploadRequestOptions extends ApiRequestOptions {
         cookies: cookies ?? this.cookies,
         noAuth: noAuth ?? this.noAuth,
         retry: clearRetry ? null : retry ?? this.retry,
-        retryUnsafeRequest:
-            retryUnsafeRequest ?? this.retryUnsafeRequest,
+        retryUnsafeRequest: retryUnsafeRequest ?? this.retryUnsafeRequest,
         idempotencyKey: idempotencyKey ?? this.idempotencyKey,
         cancelToken: cancelToken ?? this.cancelToken,
         operationId: operationId ?? this.operationId,
-        invalidateCacheTags:
-            invalidateCacheTags ?? this.invalidateCacheTags,
-        invalidateCachePaths:
-            invalidateCachePaths ?? this.invalidateCachePaths,
+        invalidateCacheTags: invalidateCacheTags ?? this.invalidateCacheTags,
+        invalidateCachePaths: invalidateCachePaths ?? this.invalidateCachePaths,
         clearActiveSessionCache:
             clearActiveSessionCache ?? this.clearActiveSessionCache,
         onSendProgress: onSendProgress ?? this.onSendProgress,

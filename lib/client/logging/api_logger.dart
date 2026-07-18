@@ -148,12 +148,10 @@ class ApiLogRedactor {
   }
 
   bool _isSensitive(String key) {
-    final normalized =
-        key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '');
+    final normalized = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '');
     return sensitiveKeys.any((candidate) {
-      final normalizedCandidate = candidate
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9-]'), '');
+      final normalizedCandidate =
+          candidate.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '');
       return normalized == normalizedCandidate ||
           normalized.contains(normalizedCandidate);
     });

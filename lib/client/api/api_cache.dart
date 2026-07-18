@@ -164,8 +164,7 @@ class ApiCache {
       path,
       query,
       if (operationId != null) operationId,
-      for (final entry in headers)
-        '${entry.key.toLowerCase()}:${entry.value}',
+      for (final entry in headers) '${entry.key.toLowerCase()}:${entry.value}',
     ].join('|');
     return raw;
   }
@@ -240,19 +239,19 @@ class ApiCache {
     final clean = pattern.trim();
     if (clean.isEmpty) return;
     await _deleteMatching(
-      (entry) => entry.sessionHash == _activeSessionHash &&
+      (entry) =>
+          entry.sessionHash == _activeSessionHash &&
           entry.originalKey.contains(clean),
     );
   }
 
   Future<void> invalidateTags(Iterable<String> tags) async {
-    final expected = tags
-        .map((tag) => tag.trim())
-        .where((tag) => tag.isNotEmpty)
-        .toSet();
+    final expected =
+        tags.map((tag) => tag.trim()).where((tag) => tag.isNotEmpty).toSet();
     if (expected.isEmpty) return;
     await _deleteMatching(
-      (entry) => entry.sessionHash == _activeSessionHash &&
+      (entry) =>
+          entry.sessionHash == _activeSessionHash &&
           entry.tags.any(expected.contains),
     );
   }
@@ -296,8 +295,7 @@ class ApiCache {
     final overflow = entries.length - config.maxEntries;
     if (overflow <= 0) return;
     entries.sort(
-      (a, b) =>
-          a.value.lastAccessedAtMs.compareTo(b.value.lastAccessedAtMs),
+      (a, b) => a.value.lastAccessedAtMs.compareTo(b.value.lastAccessedAtMs),
     );
     for (final item in entries.take(overflow)) {
       _memory.remove(item.key);
