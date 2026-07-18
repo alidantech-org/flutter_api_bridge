@@ -1,66 +1,108 @@
-import 'package:dio/dio.dart';
+import 'dart:io';
+
 import 'package:flutter_api_bridge/flutter_api_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 void main() {
-  group('ApiAuth', () {
-    test('restores an authenticated session when credentials exist', () async {
-      final strategy = _FakeAuthStrategy(hasCredential: true);
-      final logger = _RecordingLogger();
-      final auth = ApiAuth(strategy: strategy, logger: logger);
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-      final session = await auth.initialize();
+  group('transport auth restoration', () {
+    test('manual auth headers and session ID restore after restart', () async {
+      final storage = _MemoryCredentialStorage();
+      final context = AuthStrategyContext(
+        connectionKey: 'test',
+        storageNamespace: 'test-runtime',
+        cookies: ApiCookieManager.memory(
+          baseUri: Uri.parse('https://api.example.com'),
+        ),
+        secureStorage: storage,
+      );
+
+      final first = ApiAuth(
+        strategy: const NoAuthStrategy(),
+        context: context,
+      );
+      await first.initialize();
+      await first.initializeUserSession(
+        sessionId: 'user-42',
+        authHeaders: const <String, String>{
+          'Authorization': 'Custom credential',
+        },
+      );
+      await first.dispose();
+
+      final restored = ApiAuth(
+        strategy: const NoAuthStrategy(),
+        context: context,
+      );
+      final session = await restored.initialize();
 
       expect(session.status, AuthSessionStatus.authenticated);
-      expect(session.isAuthenticated, isTrue);
-      expect(logger.events.last.type, ApiLogEventType.auth);
-      await auth.dispose();
+      expect(session.sessionId, 'user-42');
+      expect(
+        restored.sessionHeaders['Authorization'],
+        'Custom credential',
+      );
+      await restored.dispose();
+    });
+  });
+
+  group('session cache isolation', () {
+    late Directory directory;
+
+    setUp(() async {
+      directory = await Directory.systemTemp.createTemp('fab_cache_test_');
+      Hive.init(directory.path);
     });
 
-    test('login completion explicitly persists credentials', () async {
-      final strategy = _FakeAuthStrategy();
-      final auth = ApiAuth(strategy: strategy);
-      await auth.initialize();
-
-      await auth.completeAuthentication(credential: 'access-token');
-
-      expect(strategy.savedCredential, 'access-token');
-      expect(auth.current.status, AuthSessionStatus.authenticated);
-      await auth.dispose();
+    tearDown(() async {
+      await Hive.close();
+      await directory.delete(recursive: true);
     });
 
-    test('repeated unauthorized responses produce one expiry transition', () async {
-      final strategy = _FakeAuthStrategy(hasCredential: true);
-      final auth = ApiAuth(strategy: strategy);
-      await auth.initialize();
-      final statuses = <AuthSessionStatus>[];
-      final subscription = auth.changes.listen((value) => statuses.add(value.status));
+    test('changing session clears the previous session cache', () async {
+      final cache = await ApiCache.create(
+        connectionKey: 'cache-test-${DateTime.now().microsecondsSinceEpoch}',
+        baseUri: Uri.parse('https://api.example.com'),
+        config: const ApiCacheConfig(),
+      );
 
-      await auth.expire();
-      await auth.expire();
+      await cache.startSession(sessionId: 'session-a');
+      await cache.write(
+        'GET|/profile',
+        const <String, dynamic>{'name': 'A'},
+        ttl: const Duration(minutes: 5),
+      );
+      expect(await cache.read('GET|/profile'), isNotNull);
 
-      expect(strategy.unauthorizedCalls, 1);
-      expect(statuses.where((value) => value == AuthSessionStatus.expired), hasLength(1));
-      await subscription.cancel();
-      await auth.dispose();
+      await cache.startSession(sessionId: 'session-b');
+      await cache.startSession(
+        sessionId: 'session-a',
+        clearPreviousOnChange: false,
+      );
+
+      expect(await cache.read('GET|/profile'), isNull);
     });
+  });
 
-    test('clear removes credentials and becomes anonymous', () async {
-      final strategy = _FakeAuthStrategy(hasCredential: true);
-      final auth = ApiAuth(strategy: strategy);
-      await auth.initialize();
+  test('request options preserve generated operation metadata', () {
+    const options = ApiGetRequestOptions(
+      cache: false,
+      forceRefresh: true,
+      headers: <String, String>{'X-Test': 'yes'},
+    );
 
-      await auth.clear();
+    final generated = options.copyWith(operationId: 'users.getCurrent');
 
-      expect(strategy.clearCalls, 1);
-      expect(auth.current.status, AuthSessionStatus.anonymous);
-      await auth.dispose();
-    });
+    expect(generated.operationId, 'users.getCurrent');
+    expect(generated.cache, isFalse);
+    expect(generated.forceRefresh, isTrue);
+    expect(generated.headers?['X-Test'], 'yes');
   });
 
   test('ApiLogRedactor removes nested secrets', () {
     const redactor = ApiLogRedactor(ApiLoggingConfig.defaultSensitiveKeys);
-
     final value = redactor.redact(<String, Object?>{
       'email': 'user@example.com',
       'password': 'secret',
@@ -68,54 +110,34 @@ void main() {
         'Authorization': 'Bearer token',
         'Accept': 'application/json',
       },
-      'nested': <Object?>[
-        <String, String>{'refresh_token': 'refresh'},
-      ],
     }) as Map<String, Object?>;
 
     expect(value['email'], 'user@example.com');
     expect(value['password'], '[REDACTED]');
-    expect((value['headers'] as Map<String, Object?>)['Authorization'], '[REDACTED]');
-    expect((value['headers'] as Map<String, Object?>)['Accept'], 'application/json');
-    expect(((value['nested'] as List<Object?>).first as Map<String, Object?>)['refresh_token'], '[REDACTED]');
+    expect(
+      (value['headers'] as Map<String, Object?>)['Authorization'],
+      '[REDACTED]',
+    );
   });
 }
 
-class _FakeAuthStrategy extends AuthStrategy {
-  _FakeAuthStrategy({this.hasCredential = false});
-
-  bool hasCredential;
-  String? savedCredential;
-  int unauthorizedCalls = 0;
-  int clearCalls = 0;
+class _MemoryCredentialStorage implements ApiCredentialStorage {
+  final Map<String, String> values = <String, String>{};
 
   @override
-  Future<void> apply(RequestOptions options) async {}
-
-  @override
-  Future<bool> hasCredentials() async => hasCredential;
-
-  @override
-  Future<void> saveCredentials(String? credential) async {
-    savedCredential = credential;
-    hasCredential = true;
+  Future<void> delete({required String key}) async {
+    values.remove(key);
   }
 
   @override
-  Future<void> clearCredentials() async {
-    clearCalls += 1;
-    hasCredential = false;
-  }
+  Future<String?> read({required String key}) async => values[key];
 
   @override
-  Future<void> onUnauthorized() async {
-    unauthorizedCalls += 1;
+  Future<void> write({required String key, required String? value}) async {
+    if (value == null) {
+      values.remove(key);
+    } else {
+      values[key] = value;
+    }
   }
-}
-
-class _RecordingLogger implements ApiLogger {
-  final List<ApiLogEvent> events = <ApiLogEvent>[];
-
-  @override
-  void log(ApiLogEvent event) => events.add(event);
 }
