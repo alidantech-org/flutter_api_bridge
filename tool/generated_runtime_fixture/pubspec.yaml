@@ -1,0 +1,21 @@
+name: generated_runtime_fixture
+description: Compile-time fixture matching generated Dart API packages.
+version: 0.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_api_bridge:
+    path: ../..
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^5.1.1
+
+flutter:
+  uses-material-design: false
