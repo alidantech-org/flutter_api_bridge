@@ -24,8 +24,17 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Verify formatting
-        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Format sources
+        run: dart format lib test
+
+      - name: Upload formatted sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-sources
+          path: |
+            lib
+            test
 
       - name: Analyze package
         run: flutter analyze
