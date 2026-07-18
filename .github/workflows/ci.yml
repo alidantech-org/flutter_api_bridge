@@ -37,11 +37,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          flutter pub publish --dry-run 2>&1 | tee publish-dry-run.log
+          flutter pub publish --dry-run 2>&1 | tee /tmp/publish-dry-run.log
 
       - name: Upload publication diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: publish-dry-run-${{ github.run_id }}
-          path: publish-dry-run.log
+          path: /tmp/publish-dry-run.log
